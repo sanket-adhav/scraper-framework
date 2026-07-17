@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.import_linter_cache/
+dist/
+*.egg-info/
+.coverage
+.env
+
+# local-only files (kept out of the repo by request)
+plans/
+plan2.md
+uv.lock
+.pre-commit-config.yaml
+.gitkeep
