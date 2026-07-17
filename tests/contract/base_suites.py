@@ -70,9 +70,21 @@ class ParserContractSuite:
         assert isinstance(parser.content_types, frozenset)
         assert parser.content_types, "a parser must declare at least one content type"
 
+    def test_declares_document_type(self):
+        """Every parser must say which Document class it produces (ADR 0001) —
+        the load-time capability check depends on this declaration."""
+        parser = self.make_component()
+        assert isinstance(parser.document_type, type)
+        assert isinstance(parser.document_type.capabilities, frozenset)
+
     def test_parse_returns_document(self):
         doc = self.make_component().parse(self.make_response())
         assert isinstance(doc, Document)
+
+    def test_parse_output_matches_declared_type(self):
+        """The document a parser returns must be an instance of its declared document_type."""
+        parser = self.make_component()
+        assert isinstance(parser.parse(self.make_response()), parser.document_type)
 
 
 class DocumentContractSuite:

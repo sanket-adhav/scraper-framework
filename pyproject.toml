@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Extensible scraping framework: a small stable core, swappable components, config-driven plugins."
 readme = "CONTRIBUTING.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "cssselect>=1.4.0",
+    "jsonpath-ng>=1.8.0",
+    "lxml>=6.1.1",
+    "pymupdf>=1.28.0",
+]
 
 [dependency-groups]
 dev = [
@@ -14,6 +19,7 @@ dev = [
     "mypy>=1.14",
     "import-linter>=2.1",
     "pre-commit>=4.0",
+    "lxml-stubs>=0.5.1",
 ]
 
 [build-system]
@@ -38,6 +44,16 @@ strict = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["jsonpath_ng.*", "pymupdf.*", "fitz.*"]
+ignore_missing_imports = true
+
+# These two modules call into libraries that ship without type annotations
+# (pymupdf, jsonpath-ng), so calls into them cannot satisfy strict mode.
+[[tool.mypy.overrides]]
+module = ["components.parsers.pdf_parser", "components.documents.json_document"]
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

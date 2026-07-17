@@ -18,4 +18,9 @@ class Parser(Protocol):
     content_types: frozenset[str]
     """Content types this parser accepts, e.g. {"text/html"}."""
 
+    document_type: type
+    """The Document class this parser produces. The load-time capability check
+    (plan2.md §5) reads this class's `capabilities` to validate extraction
+    specs before any scrape starts. See docs/adr/0001."""
+
     def parse(self, response: Response) -> Document: ...

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>ShopVerse Deals Feed</title>
+    <link>https://shopverse.example.com/deals</link>
+    <description>Daily product deals</description>
+    <item>
+      <guid>B0AURX2HDX</guid>
+      <title>Aurora X2 Wireless Headphones</title>
+      <link>https://shopverse.example.com/dp/B0AURX2HDX</link>
+      <price currency="INR">4999.00</price>
+      <pubDate>Fri, 17 Jul 2026 06:00:00 +0530</pubDate>
+    </item>
+    <item>
+      <guid>B0NIMBUSPD</guid>
+      <title>Nimbus Pods Mini</title>
+      <link>https://shopverse.example.com/dp/B0NIMBUSPD</link>
+      <price currency="INR">2199.00</price>
+      <pubDate>Fri, 17 Jul 2026 06:00:00 +0530</pubDate>
+    </item>
+  </channel>
+</rss>
