@@ -1,0 +1,6 @@
+# Production environment overrides — merged on top of the defaults.
+engine:
+  max_requests: 5000
+
+stage_timeouts:
+  fetch: 60

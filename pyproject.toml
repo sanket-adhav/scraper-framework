@@ -8,7 +8,9 @@ dependencies = [
     "cssselect>=1.4.0",
     "jsonpath-ng>=1.8.0",
     "lxml>=6.1.1",
+    "pydantic>=2.13.4",
     "pymupdf>=1.28.0",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]
@@ -20,6 +22,7 @@ dev = [
     "import-linter>=2.1",
     "pre-commit>=4.0",
     "lxml-stubs>=0.5.1",
+    "types-pyyaml>=6.0.12.20260518",
 ]
 
 [build-system]

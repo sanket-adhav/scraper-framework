@@ -4,12 +4,10 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from core.errors.exceptions import ScraperError
+from core.errors.exceptions import PersistError
 from core.models.record import Record
 
-
-class PersistError(ScraperError):
-    """Saving failed. Transient/permanent split lands in Plan 03."""
+__all__ = ["PersistError", "Repository"]
 
 
 @runtime_checkable

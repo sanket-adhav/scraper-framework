@@ -7,6 +7,7 @@ from core.contracts.login_provider import AuthError, LoginProvider, Session, Ses
 from core.contracts.middleware import Middleware, Next
 from core.contracts.parser import ParseError, Parser
 from core.contracts.repository import PersistError, Repository
+from core.contracts.secrets_provider import SecretNotFoundError, SecretsProvider
 from core.contracts.stage import Context, ErrorAction, Stage
 from core.contracts.transformer import Transformer, TransformError
 from core.contracts.validator import FieldFailure, ValidationError, ValidationResult, Validator
@@ -29,6 +30,8 @@ __all__ = [
     "Parser",
     "PersistError",
     "Repository",
+    "SecretNotFoundError",
+    "SecretsProvider",
     "Session",
     "SessionContext",
     "Stage",

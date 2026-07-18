@@ -1,8 +1,8 @@
-"""Base of the framework error taxonomy.
+"""The full typed error taxonomy (plan2.md §10).
 
-Only the root lives here for now; each contract file defines its own error stub
-next to its Protocol. The full §10 taxonomy (transient/permanent split, field
-detail, policies) lands in Plan 03.
+Every deliberate framework error lives here, rooted at ScraperError. Contract
+files re-export their own error so `from core.contracts import FetchError`
+keeps working. Transient errors are worth retrying; permanent ones are not.
 """
 
 from __future__ import annotations
@@ -10,3 +10,54 @@ from __future__ import annotations
 
 class ScraperError(Exception):
     """Root of every error the framework raises deliberately."""
+
+
+class ConfigError(ScraperError):
+    """The configuration is invalid — raised at load time, never mid-scrape."""
+
+
+class FetchError(ScraperError):
+    """Fetching a request failed."""
+
+    def __init__(self, message: str, *, transient: bool = False) -> None:
+        """Stores the message and whether a retry could plausibly succeed."""
+        super().__init__(message)
+        self.transient = transient
+
+
+class ParseError(ScraperError):
+    """The response body could not be parsed into a Document."""
+
+
+class ExtractionError(ScraperError):
+    """Extraction failed — usually the spec no longer matches the page."""
+
+    def __init__(self, message: str, *, field: str | None = None) -> None:
+        """Stores the message and, when known, which spec field failed."""
+        super().__init__(message)
+        self.field = field
+
+
+class ValidationError(ScraperError):
+    """A record failed validation hard enough to stop the pipeline."""
+
+
+class TransformError(ScraperError):
+    """A transformation could not be applied to the record."""
+
+
+class PersistError(ScraperError):
+    """Saving a record failed."""
+
+    def __init__(self, message: str, *, transient: bool = False) -> None:
+        """Stores the message and whether a retry could plausibly succeed."""
+        super().__init__(message)
+        self.transient = transient
+
+
+class PluginError(ScraperError):
+    """A plugin failed to load or misbehaved; the plugin gets quarantined."""
+
+
+class StageTimeoutError(ScraperError):
+    """A pipeline stage ran longer than its configured time limit."""

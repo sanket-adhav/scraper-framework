@@ -1,0 +1,25 @@
+# Default pipeline — the ordered stage list (plan2.md §4).
+# Plugins and jobs override or extend this per key; inserting a stage
+# (ocr, classify_document, compliance_check, discover) is a config edit.
+pipeline:
+  - fetch
+  - parse
+  - extract
+  - validate
+  - transform
+  - persist
+
+error_policy:
+  default: abort
+  max_retries: 2
+  on_retry_exhausted: abort
+  stages:
+    fetch:
+      FetchError: retry
+    persist:
+      PersistError: retry
+    validate:
+      ValidationError: quarantine
+
+engine:
+  max_requests: 1000

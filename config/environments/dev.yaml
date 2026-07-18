@@ -1,0 +1,6 @@
+# Development environment overrides — merged on top of the defaults.
+engine:
+  max_requests: 100
+
+stage_timeouts:
+  fetch: 30

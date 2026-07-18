@@ -5,12 +5,10 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from core.contracts.document import Document
-from core.errors.exceptions import ScraperError
+from core.errors.exceptions import ExtractionError
 from core.models.record import Record
 
-
-class ExtractionError(ScraperError):
-    """Extraction failed (spec/page mismatch). Per-field detail lands in Plan 03."""
+__all__ = ["ExtractionError", "ExtractionSpec", "Extractor"]
 
 
 @runtime_checkable

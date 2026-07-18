@@ -5,12 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from core.errors.exceptions import ScraperError
+from core.errors.exceptions import ValidationError
 from core.models.record import Record
 
-
-class ValidationError(ScraperError):
-    """A record failed validation hard enough to stop the pipeline (per error policy)."""
+__all__ = ["FieldFailure", "ValidationError", "ValidationResult", "Validator"]
 
 
 @dataclass(frozen=True, slots=True)
