@@ -1,7 +1,7 @@
 """All framework contracts — the ONLY core package plugins may import (plan2.md §8)."""
 
 from core.contracts.document import Document, UnsupportedSelectorError
-from core.contracts.extractor import ExtractionError, ExtractionSpec, Extractor
+from core.contracts.extractor import ExtractionError, ExtractionSpec, Extractor, FieldSpec
 from core.contracts.fetcher import Fetcher, FetchError
 from core.contracts.login_provider import AuthError, LoginProvider, Session, SessionContext
 from core.contracts.middleware import Middleware, Next
@@ -23,6 +23,7 @@ __all__ = [
     "FetchError",
     "Fetcher",
     "FieldFailure",
+    "FieldSpec",
     "LoginProvider",
     "Middleware",
     "Next",

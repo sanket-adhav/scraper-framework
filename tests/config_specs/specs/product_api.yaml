@@ -1,0 +1,33 @@
+# Demo spec: the JSON API response — the SAME extractor, a different spec.
+parser: json
+fixture: sample_api_response.json
+sample_url: "https://api.shopverse.example.com/products/B0AURX2HDX"
+
+extract:
+  schema_version: "1"
+  spec:
+    title:
+      kind: jsonpath
+      query: "$.product.name"
+    price:
+      kind: jsonpath
+      query: "$.product.price.value"
+      cleanup: [to_float]
+    sku:
+      kind: jsonpath
+      query: "$.product.id"
+    rating:
+      kind: jsonpath
+      query: "$.product.rating.score"
+      cleanup: [to_float]
+    cursor:
+      kind: jsonpath
+      query: "$.pagination.cursor"
+      required: false
+
+expect:
+  title: "Aurora X2 Wireless Headphones"
+  price: 4999.0
+  sku: "B0AURX2HDX"
+  rating: 4.4
+  cursor: "eyJvZmZzZXQiOiAyMH0"

@@ -146,7 +146,7 @@ def _reject_plaintext_secrets(value: Any, path: str = "") -> None:
 
 
 def _validate_names(model: ScraperConfigModel, registry: Registry) -> None:
-    """Checks every configured stage/middleware/parser name resolves in the registry."""
+    """Checks every configured component name resolves in the registry."""
     if not model.pipeline:
         raise ConfigError("config has no pipeline; a non-empty stage list is required")
     for stage_name in model.pipeline:
@@ -155,6 +155,16 @@ def _validate_names(model: ScraperConfigModel, registry: Registry) -> None:
         registry.factory("middleware", mw_name)
     if model.parser is not None:
         registry.factory("parser", model.parser)
+    if model.extractor is not None:
+        registry.factory("extractor", model.extractor)
+    sections = [
+        ("validator", model.validate_.validators if model.validate_ else []),
+        ("transformer", model.transform_.transformers if model.transform_ else []),
+        ("repository", model.persist_.repositories if model.persist_ else []),
+    ]
+    for kind, refs in sections:
+        for ref in refs:
+            registry.factory(kind, ref.name)
 
 
 def _validate_capabilities(model: ScraperConfigModel, registry: Registry) -> None:

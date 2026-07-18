@@ -1,0 +1,36 @@
+# Demo spec: the HTML product page — exercises CSS, XPath, regex-on-URL, cleanup chains.
+parser: html
+fixture: sample_product.html
+sample_url: "https://shopverse.example.com/dp/B0AURX2HDX"
+
+extract:
+  schema_version: "1"
+  spec:
+    title:
+      kind: css
+      query: "h1#product-title span"
+      cleanup: [collapse_whitespace]
+    price:
+      kind: xpath
+      query: "//span[@class='price']/text()"
+      cleanup: [strip_currency, to_float]
+    sku:
+      kind: regex
+      query: "/dp/([A-Z0-9]{10})"
+      against: url
+    rating:
+      kind: xpath
+      query: "//div[@class='rating']/@data-score"
+      cleanup: [to_float]
+    discount_pct:
+      kind: regex
+      query: "(\\d+)% off"
+      cleanup: [to_int]
+      required: false
+
+expect:
+  title: "Aurora X2 Wireless Headphones"
+  price: 4999.0
+  sku: "B0AURX2HDX"
+  rating: 4.4
+  discount_pct: 23

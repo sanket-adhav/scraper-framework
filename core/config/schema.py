@@ -6,6 +6,8 @@ errors surface in the loader's registry checks.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.contracts.stage import ErrorAction
@@ -52,16 +54,64 @@ class EngineConfigModel(BaseModel):
     max_requests: int = 1000
 
 
+class ComponentRefModel(BaseModel):
+    """One configured component: its registered name plus constructor options."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class ValidateSectionModel(BaseModel):
+    """The validate section: which validators run, in order."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    validators: list[ComponentRefModel] = Field(default_factory=list)
+
+
+class TransformSectionModel(BaseModel):
+    """The transform section: which transformers run, in order."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    transformers: list[ComponentRefModel] = Field(default_factory=list)
+
+
+class PersistSectionModel(BaseModel):
+    """The persist section: which repositories records are saved to."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    repositories: list[ComponentRefModel] = Field(default_factory=list)
+
+
+class PluginInfoModel(BaseModel):
+    """Which plugin this config belongs to — stamped into every record's provenance."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = ""
+    version: str = ""
+
+
 class ScraperConfigModel(BaseModel):
     """The whole merged config. Unknown top-level keys are allowed so components
     and plugins can carry their own sections without core knowing about them."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     pipeline: list[str] | None = None
+    urls: list[str] = Field(default_factory=list)
     middleware: list[str] = Field(default_factory=list)
     parser: str | None = None
+    extractor: str | None = None
     extract: ExtractConfigModel | None = None
+    plugin: PluginInfoModel = Field(default_factory=PluginInfoModel)
+    validate_: ValidateSectionModel | None = Field(default=None, alias="validate")
+    transform_: TransformSectionModel | None = Field(default=None, alias="transform")
+    persist_: PersistSectionModel | None = Field(default=None, alias="persist")
     error_policy: ErrorPolicyModel = Field(default_factory=ErrorPolicyModel)
     stage_timeouts: dict[str, float] = Field(default_factory=dict)
     engine: EngineConfigModel = Field(default_factory=EngineConfigModel)
