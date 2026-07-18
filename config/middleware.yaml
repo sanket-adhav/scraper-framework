@@ -1,0 +1,26 @@
+# Default middleware stack (plan2.md §6). First entry = outermost layer.
+#
+# ORDER RATIONALE (Plan 04 DoD: retry storms must be impossible):
+# retry sits OUTSIDE rate_limit so every retry re-enters the stack and must
+# take a rate-limit token before touching the network. A blocked response
+# (block_detection) raises a permanent error, which retry never retries.
+# Reserved slots for Plan 07 middleware are commented in position.
+middleware:
+  - retry             # retries re-enter everything below — each attempt is rate-limited
+  # - circuit_breaker # Plan 07: opens per-domain after repeated failures/blocks
+  - rate_limit        # token bucket per domain: no attempt starts over budget
+  # - cache           # Plan 07: serve recent result without fetching
+  # - auth_session    # Plan 07: attach cookies/tokens, refresh via LoginProvider
+  # - proxy_rotation  # Plan 07
+  # - ua_rotation     # Plan 07
+  - block_detection   # classify the response before anything trusts it
+  - observability     # innermost: one structured log line per actual fetch attempt
+
+middleware_options:
+  rate_limit:
+    rate: 1.0         # tokens per second per domain
+    burst: 2
+  retry:
+    max_attempts: 3
+    base_delay_s: 0.5
+    max_delay_s: 30.0

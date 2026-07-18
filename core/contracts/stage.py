@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
+from core.contracts.document import Document
+from core.contracts.validator import ValidationResult
 from core.errors.exceptions import ScraperError
+from core.models.record import Record
+from core.models.response import Response
+from core.models.scrape_request import ScrapeRequest
 
 
 class ErrorAction(StrEnum):
@@ -19,11 +25,19 @@ class ErrorAction(StrEnum):
 
 @runtime_checkable
 class Context(Protocol):
-    """The pipeline's data carrier. The concrete carrier (request, response,
-    document, record, discovered_requests, resolved config) is built in Plan 03
-    at core/pipeline/context.py; stages depend only on this surface."""
+    """The pipeline data carrier's surface, as stages see it. The concrete
+    carrier lives in core/pipeline/context.py; stages (which live in
+    components/ and may not import core.pipeline) depend only on this shape."""
 
     trace_id: str
+    config: Mapping[str, Any]
+    config_fingerprint: str
+    request: ScrapeRequest | None
+    response: Response | None
+    document: Document | None
+    record: Record | None
+    validation_result: ValidationResult | None
+    discovered_requests: list[ScrapeRequest]
 
 
 @runtime_checkable

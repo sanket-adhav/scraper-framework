@@ -19,10 +19,12 @@ class ConfigError(ScraperError):
 class FetchError(ScraperError):
     """Fetching a request failed."""
 
-    def __init__(self, message: str, *, transient: bool = False) -> None:
-        """Stores the message and whether a retry could plausibly succeed."""
+    def __init__(self, message: str, *, transient: bool = False, blocked: bool = False) -> None:
+        """Stores the message, whether a retry could plausibly succeed, and
+        whether the site blocked us (CAPTCHA / access denied) — plan2.md §12."""
         super().__init__(message)
         self.transient = transient
+        self.blocked = blocked
 
 
 class ParseError(ScraperError):
