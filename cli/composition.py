@@ -13,10 +13,17 @@ from typing import Any
 from components.extractors.spec_driven import SpecDrivenExtractor
 from components.fetchers.http_fetcher import HttpFetcher
 from components.fetchers.local_file_fetcher import LocalFileFetcher
+from components.fetchers.playwright_fetcher import PlaywrightFetcher
 from components.middleware.block_detection import BlockDetectionMiddleware
+from components.middleware.caching import CachingMiddleware
+from components.middleware.circuit_breaker import CircuitBreakerMiddleware
+from components.middleware.cookie_manager import CookieManagerMiddleware
+from components.middleware.cost_tracker import CostTrackerMiddleware
 from components.middleware.observability import ObservabilityMiddleware
+from components.middleware.proxy_rotation import ProxyRotationMiddleware
 from components.middleware.rate_limiter import RateLimiterMiddleware
 from components.middleware.retry import RetryMiddleware
+from components.middleware.ua_rotation import UaRotationMiddleware
 from components.parsers.html_parser import HtmlParser
 from components.parsers.json_parser import JsonParser
 from components.parsers.pdf_parser import PdfParser
@@ -53,6 +60,7 @@ def default_registry() -> Registry:
     registry = Registry()
     registry.register("fetcher", "http", HttpFetcher)
     registry.register("fetcher", "local_file", LocalFileFetcher)
+    registry.register("fetcher", "playwright", PlaywrightFetcher)
     registry.register("parser", "html", HtmlParser)
     registry.register("parser", "json", JsonParser)
     registry.register("parser", "xml", XmlParser)
@@ -62,6 +70,12 @@ def default_registry() -> Registry:
     registry.register("middleware", "retry", RetryMiddleware)
     registry.register("middleware", "block_detection", BlockDetectionMiddleware)
     registry.register("middleware", "observability", ObservabilityMiddleware)
+    registry.register("middleware", "circuit_breaker", CircuitBreakerMiddleware)
+    registry.register("middleware", "cache", CachingMiddleware)
+    registry.register("middleware", "proxy_rotation", ProxyRotationMiddleware)
+    registry.register("middleware", "ua_rotation", UaRotationMiddleware)
+    registry.register("middleware", "cookie_manager", CookieManagerMiddleware)
+    registry.register("middleware", "cost_tracker", CostTrackerMiddleware)
     registry.register("extractor", "spec_driven", SpecDrivenExtractor)
     registry.register("validator", "required_field", RequiredFieldValidator)
     registry.register("validator", "type", TypeValidator)

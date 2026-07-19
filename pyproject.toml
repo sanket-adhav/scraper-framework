@@ -5,10 +5,12 @@ description = "Extensible scraping framework: a small stable core, swappable com
 readme = "CONTRIBUTING.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cryptography>=49.0.0",
     "cssselect>=1.4.0",
     "httpx>=0.28.1",
     "jsonpath-ng>=1.8.0",
     "lxml>=6.1.1",
+    "playwright>=1.61.0",
     "pydantic>=2.13.4",
     "pymupdf>=1.28.0",
     "pyyaml>=6.0.3",
@@ -58,8 +60,15 @@ module = "tests.*"
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["jsonpath_ng.*", "pymupdf.*", "fitz.*"]
+module = ["jsonpath_ng.*", "pymupdf.*", "fitz.*", "playwright.*"]
 ignore_missing_imports = true
+
+# The Playwright fetcher and login providers call into Playwright's dynamically
+# typed browser objects, which cannot satisfy strict mode.
+[[tool.mypy.overrides]]
+module = ["components.fetchers.playwright_fetcher", "components.auth.form_login"]
+disallow_untyped_calls = false
+disallow_any_explicit = false
 
 # These two modules call into libraries that ship without type annotations
 # (pymupdf, jsonpath-ng), so calls into them cannot satisfy strict mode.

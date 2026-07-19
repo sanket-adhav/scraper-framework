@@ -31,20 +31,34 @@ class HttpFetcher:
     ) -> None:
         """Builds the underlying httpx client; `transport` is injectable so tests
         can use httpx.MockTransport and stay fully offline."""
-        self._client = httpx.AsyncClient(
-            timeout=timeout_s,
-            follow_redirects=follow_redirects,
-            verify=verify_tls,
-            http2=http2,
-            headers=dict(default_headers or {}),
-            transport=transport,
-        )
+        self._client_kwargs: dict[str, Any] = {
+            "timeout": timeout_s,
+            "follow_redirects": follow_redirects,
+            "verify": verify_tls,
+            "http2": http2,
+            "headers": dict(default_headers or {}),
+            "transport": transport,
+        }
+        self._client = httpx.AsyncClient(**self._client_kwargs)
+        self._proxy_clients: dict[str, httpx.AsyncClient] = {}
+
+    def _client_for(self, request: ScrapeRequest) -> httpx.AsyncClient:
+        """Returns the client for this request — a per-proxy client if one was set
+        by the proxy-rotation middleware, else the default shared client."""
+        proxy = request.metadata.get("proxy")
+        if not proxy:
+            return self._client
+        if proxy not in self._proxy_clients:
+            self._proxy_clients[proxy] = httpx.AsyncClient(
+                **{**self._client_kwargs, "proxy": str(proxy)}
+            )
+        return self._proxy_clients[proxy]
 
     async def fetch(self, request: ScrapeRequest) -> Response:
         """Performs one HTTP request and returns the framework Response."""
         started = time.monotonic()
         try:
-            reply = await self._client.request(
+            reply = await self._client_for(request).request(
                 request.method,
                 request.url,
                 headers=dict(request.headers),
@@ -65,5 +79,7 @@ class HttpFetcher:
         )
 
     async def aclose(self) -> None:
-        """Closes the underlying HTTP client and its connections."""
+        """Closes the default client and every per-proxy client."""
         await self._client.aclose()
+        for client in self._proxy_clients.values():
+            await client.aclose()

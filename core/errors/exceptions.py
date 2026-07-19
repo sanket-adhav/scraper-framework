@@ -61,5 +61,9 @@ class PluginError(ScraperError):
     """A plugin failed to load or misbehaved; the plugin gets quarantined."""
 
 
+class AuthError(ScraperError):
+    """Login failed or a session could not be acquired/refreshed."""
+
+
 class StageTimeoutError(ScraperError):
     """A pipeline stage ran longer than its configured time limit."""

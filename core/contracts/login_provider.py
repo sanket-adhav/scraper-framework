@@ -1,33 +1,46 @@
-"""LoginProvider contract — acquires and checks authenticated sessions (plan2.md §3).
+"""LoginProvider contract and the concrete Session model (plan2.md §3, Plan 07).
 
-Session and SessionContext are deliberately minimal stubs: concrete session
-shape (cookies, tokens, persistence, encryption) is Plan 07 territory, and
-guessing it now would be designing in a vacuum.
+A Session is the authenticated state (cookies + headers) a fetch rides on.
+A LoginProvider knows how to acquire one and check whether it's still valid.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Protocol, runtime_checkable
 
-from core.errors.exceptions import ScraperError
+from core.errors.exceptions import AuthError
+
+__all__ = ["AuthError", "LoginProvider", "Session", "SessionContext"]
 
 
-class AuthError(ScraperError):
-    """Login failed or a session could not be refreshed."""
+@dataclass(frozen=True, slots=True)
+class Session:
+    """Authenticated state: cookies and headers to attach, plus when it was acquired."""
+
+    cookies: Mapping[str, str] = field(default_factory=dict)
+    headers: Mapping[str, str] = field(default_factory=dict)
+    acquired_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
-@runtime_checkable
-class Session(Protocol):
-    """Opaque authenticated state a fetch can be performed with."""
+@dataclass(frozen=True, slots=True)
+class SessionContext:
+    """What a LoginProvider needs to log in: the target and resolved credentials."""
 
-
-@runtime_checkable
-class SessionContext(Protocol):
-    """What a LoginProvider needs to acquire a session (credentials refs, target info)."""
+    plugin: str
+    account: str
+    login_url: str = ""
+    credentials: Mapping[str, str] = field(default_factory=dict)
 
 
 @runtime_checkable
 class LoginProvider(Protocol):
-    async def acquire(self, ctx: SessionContext) -> Session: ...
+    async def acquire(self, ctx: SessionContext) -> Session:
+        """Logs in and returns a fresh Session."""
+        ...
 
-    async def is_valid(self, session: Session) -> bool: ...
+    async def is_valid(self, session: Session) -> bool:
+        """Reports whether the session is still usable (not expired/logged out)."""
+        ...

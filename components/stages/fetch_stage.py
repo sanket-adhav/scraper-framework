@@ -22,11 +22,16 @@ class FetchStage:
         self._entry = compose(list(middlewares), fetcher.fetch)
 
     async def run(self, ctx: Context) -> Context:
-        """Fetches the context's request (tagged with the trace id) and stores the response."""
+        """Fetches the request, tagged with the trace id and plugin name so
+        middleware (observability, cost tracking) can attribute it."""
         if ctx.request is None:
             raise FetchError("fetch stage needs ctx.request, but none was set")
         request = ctx.request
-        tagged = replace(request, metadata={**request.metadata, "trace_id": ctx.trace_id})
+        plugin = (ctx.config.get("plugin") or {}).get("name", "-")
+        tagged = replace(
+            request,
+            metadata={**request.metadata, "trace_id": ctx.trace_id, "plugin": plugin},
+        )
         ctx.response = await self._entry(tagged)
         return ctx
 
