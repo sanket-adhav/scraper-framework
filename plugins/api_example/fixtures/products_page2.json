@@ -1,0 +1,11 @@
+{
+  "product": {
+    "id": "B0NIMBUSPD",
+    "name": "Nimbus Pods Mini",
+    "brand": "Nimbus",
+    "price": {"value": 2199.0, "currency": "INR"},
+    "rating": {"score": 4.1, "count": 412},
+    "in_stock": false
+  },
+  "pagination": {}
+}

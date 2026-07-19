@@ -1,0 +1,7 @@
+name: api_example
+version: 1.0.0
+description: "ShopVerse products API (synthetic fixtures) — the Phase-1 JSON proving plugin, with cursor pagination via the discover stage."
+tier: open
+source_approval: "docs/source_approval.md#SRC-0002"
+config_files:
+  - config/extraction.yaml

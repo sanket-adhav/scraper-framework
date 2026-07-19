@@ -59,7 +59,7 @@ class TestEverySpecAgainstItsFixture:
         registry = default_registry()
         parser = registry.factory("parser", doc["parser"])()
         content_type = next(iter(parser.content_types))
-        document = parser.parse(fixture_response(doc["fixture"], content_type))
+        document = parser.parse(_fixture_for(spec_path, doc["fixture"], content_type))
         record = SpecDrivenExtractor().extract(
             document, spec, source_url=doc.get("sample_url", "")
         )
@@ -67,6 +67,17 @@ class TestEverySpecAgainstItsFixture:
             assert record.data.get(field) == expected, f"field {field!r} mismatch"
 
 
-def test_at_least_the_demo_specs_are_discovered():
+def _fixture_for(spec_path: Path, name: str, content_type: str):
+    """Loads a spec's sample fixture: from the plugin's own fixtures/ folder when
+    the spec lives in a plugin, else from the shared tests/fixtures corpus."""
+    plugin_fixture = spec_path.parent.parent / "fixtures" / name
+    if plugin_fixture.is_file():
+        from core.models import Response
+
+        return Response(status=200, body=plugin_fixture.read_bytes(), content_type=content_type)
+    return fixture_response(name, content_type)
+
+
+def test_at_least_the_demo_and_plugin_specs_are_discovered():
     """The machinery itself must never silently discover nothing."""
-    assert len(SPECS) >= 2
+    assert len(SPECS) >= 4  # two demo specs + two Phase-1 plugin specs

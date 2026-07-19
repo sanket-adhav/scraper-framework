@@ -24,6 +24,7 @@ from components.parsers.text_parser import TextParser
 from components.parsers.xml_parser import XmlParser
 from components.repositories.csv_repository import CsvRepository
 from components.repositories.jsonl_repository import JsonlRepository
+from components.stages.discover_stage import DiscoverStage
 from components.stages.extract_stage import ExtractStage
 from components.stages.fetch_stage import FetchStage
 from components.stages.parse_stage import ParseStage
@@ -147,10 +148,23 @@ def build_persist_stage(registry: Registry, config: Mapping[str, Any]) -> Persis
     return PersistStage(repositories)
 
 
+def build_discover_stage(config: Mapping[str, Any]) -> DiscoverStage:
+    """Builds the discover stage from the config's `discover` section."""
+    section: Mapping[str, Any] = config.get("discover") or {}
+    if "next_url" not in section:
+        raise ConfigError("pipeline has a discover stage but config has no `discover.next_url`")
+    return DiscoverStage(
+        next_url=section["next_url"],
+        url_template=section.get("url_template"),
+        max_new=int(section.get("max_new", 100)),
+    )
+
+
 def register_default_stages(registry: Registry, config: Mapping[str, Any]) -> None:
-    """Registers all six standard stages, wired from the given resolved config."""
+    """Registers all seven standard stages, wired from the given resolved config."""
     registry.register("stage", "fetch", lambda: build_fetch_stage(registry, config))
     registry.register("stage", "parse", lambda: build_parse_stage(registry, config))
+    registry.register("stage", "discover", lambda: build_discover_stage(config))
     registry.register("stage", "extract", lambda: build_extract_stage(registry, config))
     registry.register("stage", "validate", lambda: build_validate_stage(registry, config))
     registry.register("stage", "transform", lambda: build_transform_stage(registry, config))

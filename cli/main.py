@@ -12,6 +12,7 @@ from pathlib import Path
 import typer
 
 from cli.composition import default_registry, register_default_stages
+from cli.scaffold import scaffold_plugin
 from components.quarantine.file_sink import FileQuarantineSink
 from core.config.loader import ConfigLayer, ResolvedConfig, load_config
 from core.engine.job import ScrapeJob
@@ -21,6 +22,7 @@ from core.errors.policy import policy_from_config
 from core.models.scrape_request import ScrapeRequest
 from core.pipeline.builder import build_pipeline
 from core.pipeline.runner import PipelineRunner
+from core.plugin.manager import PluginManager
 from core.registry.registry import Registry
 
 app = typer.Typer(help="Config-driven scraping framework.", no_args_is_help=True)
@@ -139,12 +141,41 @@ def dry_run(
 
 
 @app.command("list-components")
-def list_components() -> None:
-    """Lists every registered built-in component, grouped by kind."""
+def list_components(
+    plugins_dir: Path = typer.Option(Path("plugins"), help="Plugin folder to inspect"),
+) -> None:
+    """Lists every registered component by kind, plus plugin status (incl. quarantined)."""
     registry = default_registry()
+    manager = PluginManager(registry)
+    if plugins_dir.is_dir():
+        manager.load_all(plugins_dir)
     for kind in registry.kinds():
         typer.echo(f"{kind}: {', '.join(registry.names(kind))}")
-    typer.echo("stage: fetch, parse, extract, validate, transform, persist (wired from config)")
+    typer.echo("stage: fetch, parse, discover, extract, validate, transform, persist (from config)")
+    for plugin in manager.loaded:
+        m = plugin.manifest
+        typer.echo(f"plugin: {m.name} v{m.version} [{m.tier}] — ok")
+    for bad in manager.quarantined:
+        typer.echo(f"plugin: {bad.name} — QUARANTINED: {bad.reason}")
+
+
+scaffold_app = typer.Typer(help="Generate boilerplate.", no_args_is_help=True)
+app.add_typer(scaffold_app, name="scaffold")
+
+
+@scaffold_app.command("new-plugin")
+def new_plugin(
+    name: str = typer.Argument(..., help="Plugin name (lowercase identifier)"),
+    plugins_dir: Path = typer.Option(Path("plugins"), help="Where plugin folders live"),
+) -> None:
+    """Creates a working plugin skeleton that passes `scraper validate` immediately."""
+    try:
+        root = scaffold_plugin(name, plugins_dir)
+    except FileExistsError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(code=1) from err
+    typer.echo(f"created {root}")
+    typer.echo(f"next: scraper validate {root / 'config' / 'extraction.yaml'}")
 
 
 if __name__ == "__main__":

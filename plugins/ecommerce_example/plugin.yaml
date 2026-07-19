@@ -1,0 +1,7 @@
+name: ecommerce_example
+version: 1.0.0
+description: "ShopVerse product pages (synthetic fixtures) — the Phase-1 HTML proving plugin. Spec-only: no Python."
+tier: open
+source_approval: "docs/source_approval.md#SRC-0001"
+config_files:
+  - config/extraction.yaml
