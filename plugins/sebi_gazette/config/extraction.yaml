@@ -65,6 +65,7 @@ error_policy:
   stages:
     extract:
       ExtractionError: skip
+      UnsupportedSelectorError: skip
     validate:
       ValidationError: skip
     transform:

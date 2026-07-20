@@ -2,6 +2,6 @@ name: sebi_circulars
 version: 0.1.0
 description: "Scrapes SEBI circulars, guidelines, orders, and gazette notifications from sebi.gov.in"
 tier: open
-source_approval: "docs/source_approval.md#sebi_circulars"
+source_approval: "docs/source_approval.md#SRC-0006"
 config_files:
   - config/extraction.yaml

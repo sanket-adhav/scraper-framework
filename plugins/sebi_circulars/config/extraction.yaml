@@ -68,11 +68,13 @@ validate:
     - name: required_field
       options: {fields: [date, title, pdf_link]}
 
-# Skip extraction and validation errors for the main listing page (which doesn't have detail fields)
+# Skip pages that aren't HTML detail pages: the listing page (no detail fields)
+# and links that resolve straight to a PDF (CSS selectors don't apply there).
 error_policy:
   stages:
     extract:
       ExtractionError: skip
+      UnsupportedSelectorError: skip
     validate:
       ValidationError: skip
     transform:

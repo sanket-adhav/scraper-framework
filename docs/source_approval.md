@@ -82,10 +82,50 @@ For each proposed source, record:
 - **Decision:** **allowed** (public scraping sandbox, explicitly intended for this).
 - **Approver:** Sanket Adhav · **Date:** 2026-07-20
 
-> Draft-only note: `plugins/amfi_circulars`, `plugins/sebi_circulars`, and
-> `plugins/sebi_gazette` are **work-in-progress config drafts** targeting Indian
-> regulator sites (AMFI, SEBI). They use a `manifest.yaml` (not `plugin.yaml`),
-> so the plugin loader does NOT load them yet, and they have **no approval
-> entry**. Before any of them becomes a live plugin, it needs (a) a real
-> ToS/robots.txt/public-data review recorded here, and (b) rename to
-> `plugin.yaml` with a valid `source_approval` reference.
+### SRC-0005 — AMFI circulars (LIVE) — Plugin: amfi_circulars
+
+- **What it is:** `https://www.amfiindia.com/distributor/amfi-circulars` — the
+  Association of Mutual Funds in India (AMFI) publishes Best-Practice circulars
+  and guidelines here for the mutual-fund industry. JS-rendered (Next.js), so the
+  plugin uses the Playwright fetcher; it discovers circular PDFs and stores them.
+- **ToS review:** these are **public regulatory/industry circulars** published
+  by AMFI for open consumption by distributors and the public. No login, no
+  paywall. Purpose here is **regulatory-compliance monitoring** (the operator
+  runs a compliance product). No prohibition on programmatic access observed.
+- **robots.txt:** none served (HTTP 404 at /robots.txt on 2026-07-20) — nothing
+  disallowed. We fetch the circulars page + linked PDFs politely (rate-limited,
+  `max_requests` capped), not a site-wide crawl.
+- **Personal data:** none — regulatory circulars, no personal data.
+- **Anti-bot countermeasures:** none used (tier `open`); Playwright is for JS
+  rendering, not evasion.
+- **Decision:** **allowed** (public regulatory data, compliance purpose).
+- **Approver:** Sanket Adhav · **Date:** 2026-07-20
+
+### SRC-0006 — SEBI circulars (LIVE) — Plugin: sebi_circulars
+
+- **What it is:** `https://www.sebi.gov.in/sebiweb/home/HomeAction.do?doListingAll=yes`
+  — the Securities and Exchange Board of India (SEBI) "all listings" page for
+  circulars, guidelines, and orders. The plugin discovers detail pages, extracts
+  metadata, and stores the linked PDFs.
+- **ToS review:** SEBI is India's securities regulator; circulars are **statutory
+  public documents** published for market participants and the public. Open
+  access, no login. Purpose: regulatory-compliance monitoring.
+- **robots.txt:** `User-agent: * / Disallow:` (allow-all) with only `/js`, `/css`,
+  `/hindi/js`, `/hindi/css` disallowed (2026-07-20). The `/sebiweb/home/…` content
+  pages we fetch are **explicitly permitted**. Fetched politely, rate-limited.
+- **Personal data:** none — regulatory filings.
+- **Anti-bot countermeasures:** none used (tier `open`).
+- **Decision:** **allowed** (public regulatory data, robots-permitted, compliance purpose).
+- **Approver:** Sanket Adhav · **Date:** 2026-07-20
+
+### SRC-0007 — SEBI gazette notifications (LIVE) — Plugin: sebi_gazette
+
+- **What it is:**
+  `https://www.sebi.gov.in/sebiweb/home/HomeAction.do?doListing=yes&sid=1&ssid=82&smid=0`
+  — SEBI's gazette-notifications listing. Same site and posture as SRC-0006;
+  a separate section, so recorded as its own source.
+- **ToS review / robots.txt / personal data / anti-bot:** identical basis to
+  SRC-0006 — public statutory notifications, robots allow-all for content pages,
+  no personal data, no countermeasures, tier `open`, compliance purpose.
+- **Decision:** **allowed** (public regulatory data, robots-permitted, compliance purpose).
+- **Approver:** Sanket Adhav · **Date:** 2026-07-20
