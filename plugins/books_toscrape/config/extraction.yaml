@@ -1,0 +1,67 @@
+pipeline: [fetch, parse, extract, validate, transform, persist]
+
+urls:
+  - "http://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html"
+
+fetcher: http
+
+parser: html
+
+plugin:
+  name: books_toscrape
+  version: 1.0.0
+
+extract:
+  schema_version: "1"
+  spec:
+    title:
+      kind: css
+      query: "div.product_main h1"
+    price:
+      kind: css
+      query: "div.product_main p.price_color"
+      cleanup: [strip_currency, to_float]
+    availability:
+      kind: xpath
+      query: "normalize-space(substring-before(//p[contains(@class, 'availability')]/text()[normalize-space()], '('))"
+    upc:
+      kind: css
+      query: "table.table-striped tr:nth-child(1) td"
+    rating:
+      kind: xpath
+      query: "//p[contains(@class, 'star-rating')]/@class"
+      # We will map "star-rating Three" -> 3 in the transform stage
+    stock_count:
+      kind: regex
+      query: "(\\d+) available"
+      cleanup: [to_int]
+      required: false
+
+validate:
+  validators:
+    - name: required_field
+      options: {fields: [title, price, upc]}
+
+transform:
+  transformers:
+    - name: text_cleaner
+    - name: enum_mapper
+      options:
+        mappings:
+          rating:
+            "star-rating One": 1
+            "star-rating Two": 2
+            "star-rating Three": 3
+            "star-rating Four": 4
+            "star-rating Five": 5
+          availability:
+            "In stock": true
+            "Out of stock": false
+
+
+persist:
+  repositories:
+    - name: jsonl
+      options:
+        path: "output/books.jsonl"
+        mode: append

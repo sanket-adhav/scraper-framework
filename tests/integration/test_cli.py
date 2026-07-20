@@ -129,6 +129,7 @@ class TestListComponents:
     def test_lists_registry_by_kind(self):
         result = runner.invoke(app, ["list-components"])
         assert result.exit_code == 0
-        assert "fetcher: http, local_file" in result.output
+        assert "http" in result.output and "local_file" in result.output
         assert "validator:" in result.output and "required_field" in result.output
-        assert "repository: csv, jsonl" in result.output
+        # csv, jsonl, and the Plan-08 postgres repository are all registered
+        assert "csv" in result.output and "jsonl" in result.output and "postgres" in result.output

@@ -43,6 +43,7 @@ def load_config(
     *,
     presets_dir: str | Path | None = None,
     registry: Registry | None = None,
+    secrets: Any = None,
 ) -> ResolvedConfig:
     """Merges the layers (later wins per key), validates everything, and returns
     the resolved config with its fingerprint. Raises ConfigError on any problem."""
@@ -61,6 +62,8 @@ def load_config(
     fingerprint = hashlib.sha256(
         json.dumps(merged, sort_keys=True, default=str).encode()
     ).hexdigest()
+    if secrets is not None:
+        merged = resolve_secret_refs(merged, secrets)
     return ResolvedConfig(data=merged, fingerprint=fingerprint)
 
 

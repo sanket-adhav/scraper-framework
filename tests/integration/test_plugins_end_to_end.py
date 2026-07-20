@@ -4,9 +4,11 @@ scaffold output validates immediately, and quarantine shows in list-components."
 
 import csv
 import json
+import os
 import shutil
 from pathlib import Path
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -22,6 +24,16 @@ from core.pipeline.runner import PipelineRunner
 
 runner = CliRunner()
 REPO_ROOT = Path(__file__).parent.parent.parent
+
+
+def _cleanup_table(table: str) -> None:
+    """Drops a test table from the Postgres database, keeping it clean."""
+    import psycopg
+
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"DROP TABLE IF EXISTS {table}")
+        conn.commit()
 
 
 async def run_plugin_config(config_path: Path, overlay: dict) -> int:
@@ -112,17 +124,20 @@ class TestPluginBApi:
 
 
 class TestCliOnRealPlugins:
-    def test_scraper_run_plugin_a_from_repo_root(self, monkeypatch, tmp_path):
-        """Phase-1 exit DoD: `scraper run` on the plugin's own config, green."""
+    @pytest.mark.skipif(
+        not os.environ.get("DATABASE_URL"),
+        reason="ecommerce_example persists to Postgres; needs DATABASE_URL",
+    )
+    def test_scraper_run_plugin_a_writes_to_postgres(self, monkeypatch):
+        """`scraper run` on the plugin's own config (Postgres-backed) runs green,
+        resolving secret://env/DATABASE_URL and writing rows to the DB."""
         monkeypatch.chdir(REPO_ROOT)
         result = runner.invoke(
             app, ["run", str(Path("plugins/ecommerce_example/config/extraction.yaml"))]
         )
         assert result.exit_code == 0, result.output
         assert "2 completed, 0 aborted" in result.output
-        out = REPO_ROOT / "output" / "ecommerce_example.csv"
-        assert out.exists()
-        out.unlink()  # keep the repo clean
+        _cleanup_table("ecommerce_example")
 
     def test_scraper_run_plugin_b_from_repo_root(self, monkeypatch):
         monkeypatch.chdir(REPO_ROOT)

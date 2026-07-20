@@ -1,0 +1,7 @@
+name: books_toscrape
+version: 1.0.0
+description: "books.toscrape.com — Zyte's public web-scraping sandbox. First real live-site plugin (HTML product pages, CSS/XPath/regex, rating enum-mapping)."
+tier: open
+source_approval: "docs/source_approval.md#SRC-0004"
+config_files:
+  - config/extraction.yaml

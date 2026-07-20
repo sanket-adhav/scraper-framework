@@ -1,0 +1,55 @@
+{
+  "__comment": "Grafana dashboard for the scraper metrics (plan2.md §10, Plan 08). Import into any Grafana with a Prometheus datasource scraping the MetricsListener registry. Panels read the exact series the metrics listener emits.",
+  "title": "Scraper — Block Rate & Validation Failures",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Block rate by plugin (blocks / fetches)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum by (plugin) (rate(scraper_blocks_total[5m])) / clamp_min(sum by (plugin) (rate(scraper_fetches_total[5m])), 1)",
+          "legendFormat": "{{plugin}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Per-field validation-failure rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "sum by (plugin, field) (rate(scraper_validation_failures_total[5m]))",
+          "legendFormat": "{{plugin}} / {{field}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Save throughput (records/s)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "sum by (plugin) (rate(scraper_records_saved_total[5m]))",
+          "legendFormat": "{{plugin}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Extraction success (extracted vs saved)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "sum by (plugin) (rate(scraper_records_extracted_total[5m]))", "legendFormat": "extracted {{plugin}}"},
+        {"expr": "sum by (plugin) (rate(scraper_records_saved_total[5m]))", "legendFormat": "saved {{plugin}}"}
+      ]
+    }
+  ]
+}

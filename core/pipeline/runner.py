@@ -13,18 +13,23 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from core.contracts.stage import ErrorAction, Stage
-from core.errors.exceptions import ScraperError, StageTimeoutError
+from core.errors.exceptions import FetchError, ScraperError, StageTimeoutError, ValidationError
 from core.errors.policy import ErrorPolicy
 from core.errors.quarantine import QuarantineRecord, QuarantineSink
 from core.events.bus import EventBus
 from core.events.types import (
+    BLOCK_DETECTED,
+    RECORD_EXTRACTED,
     RECORD_QUARANTINED,
+    RECORD_SAVED,
     STAGE_COMPLETED,
     STAGE_FAILED,
     STAGE_RETRYING,
     STAGE_STARTED,
+    VALIDATION_FAILED,
     Event,
 )
+from core.observability.tracing import stage_span
 from core.pipeline.context import Context
 
 
@@ -82,6 +87,7 @@ class PipelineRunner:
                 await self._run_once(stage, ctx)
             except Exception as raw:  # noqa: BLE001 — every failure goes through the policy
                 error = _as_scraper_error(raw, stage.name)
+                self._emit_domain_failure(ctx, stage, error)
                 action = self._action_for(stage, ctx, error)
                 if action is ErrorAction.RETRY:
                     if attempts < self._policy.max_retries:
@@ -106,20 +112,22 @@ class PipelineRunner:
                 )
             else:
                 self._emit(STAGE_COMPLETED, ctx, stage)
+                self._emit_domain_success(ctx, stage)
                 return None
 
     async def _run_once(self, stage: Stage, ctx: Context) -> None:
-        """Runs a stage a single time, enforcing its timeout if one is configured."""
+        """Runs a stage a single time inside a trace span, enforcing any timeout."""
         timeout = self._timeouts.get(stage.name)
-        if timeout is None:
-            await stage.run(ctx)
-        else:
-            try:
-                await asyncio.wait_for(stage.run(ctx), timeout=timeout)
-            except TimeoutError as err:
-                raise StageTimeoutError(
-                    f"stage {stage.name!r} exceeded its {timeout}s time limit"
-                ) from err
+        with stage_span(stage.name, ctx.trace_id):
+            if timeout is None:
+                await stage.run(ctx)
+            else:
+                try:
+                    await asyncio.wait_for(stage.run(ctx), timeout=timeout)
+                except TimeoutError as err:
+                    raise StageTimeoutError(
+                        f"stage {stage.name!r} exceeded its {timeout}s time limit"
+                    ) from err
 
     def _action_for(self, stage: Stage, ctx: Context, error: ScraperError) -> ErrorAction:
         """Picks the error action: config policy first, then the stage's own fallback."""
@@ -155,6 +163,29 @@ class PipelineRunner:
         payload: dict[str, object] = {"trace_id": ctx.trace_id, "stage": stage.name, **extra}
         self._bus.publish(Event(type=event_type, payload=payload))
 
+    def _emit_domain_success(self, ctx: Context, stage: Stage) -> None:
+        """Emits high-level events after a stage completes, read from the context —
+        record.extracted / record.saved, so metrics don't couple to stage code."""
+        if ctx.record is not None and stage.name == "extract":
+            self._emit(RECORD_EXTRACTED, ctx, stage, plugin=_plugin_of(ctx))
+        elif ctx.record is not None and stage.name == "persist":
+            self._emit(RECORD_SAVED, ctx, stage, plugin=_plugin_of(ctx))
+
+    def _emit_domain_failure(self, ctx: Context, stage: Stage, error: ScraperError) -> None:
+        """Emits high-level failure events by error TYPE (not stage name): a block or
+        a validation failure with its per-field detail, for block-rate/validation metrics."""
+        if isinstance(error, FetchError) and error.blocked:
+            self._emit(BLOCK_DETECTED, ctx, stage, plugin=_plugin_of(ctx))
+        if isinstance(error, ValidationError):
+            failures = ctx.validation_result.failures if ctx.validation_result else ()
+            self._emit(
+                VALIDATION_FAILED,
+                ctx,
+                stage,
+                plugin=_plugin_of(ctx),
+                fields=[f.field for f in failures],
+            )
+
 
 def _as_scraper_error(raw: Exception, stage_name: str) -> ScraperError:
     """Passes ScraperErrors through and wraps anything unexpected so policy can apply."""
@@ -163,3 +194,9 @@ def _as_scraper_error(raw: Exception, stage_name: str) -> ScraperError:
     wrapped = ScraperError(f"unexpected error in stage {stage_name!r}: {raw!r}")
     wrapped.__cause__ = raw
     return wrapped
+
+
+def _plugin_of(ctx: Context) -> str:
+    """Reads the plugin name from the resolved config for event attribution."""
+    plugin = ctx.config.get("plugin") or {}
+    return str(plugin.get("name", "-")) if isinstance(plugin, dict) else "-"

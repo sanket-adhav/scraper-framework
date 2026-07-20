@@ -52,7 +52,40 @@ For each proposed source, record:
 - **Decision:** **allowed** (fixture-only source).
 - **Approver:** Sanket Adhav · **Date:** 2026-07-18
 
-> Note: both Phase-1 sources are deliberately synthetic so the contracts could
-> be proven without any legal ambiguity. The first plugin that targets a real,
-> live website MUST add a new SRC entry here with an honest ToS/robots/PII
-> assessment before any code or config for it is merged.
+### SRC-0003 — ShopVerse deals feed (synthetic RSS/XML fixtures) — Plugin: news_feed
+
+- **What it is:** hand-written sample RSS/XML feed pages (with next-page links)
+  for the fictional ShopVerse deals feed, stored in `plugins/news_feed/fixtures/`.
+  No live feed exists.
+- **ToS review / robots.txt:** not applicable — synthetic fixture data.
+- **Personal data:** none.
+- **Anti-bot countermeasures:** not applicable. Same revocation rule as SRC-0001.
+- **Decision:** **allowed** (fixture-only source).
+- **Approver:** Sanket Adhav · **Date:** 2026-07-19
+
+> Note: SRC-0001..0003 are deliberately synthetic so the contracts could be
+> proven without any legal ambiguity. SRC-0004 below is the first real live
+> target — chosen precisely because it is unambiguously permitted.
+
+### SRC-0004 — books.toscrape.com (LIVE) — Plugin: books_toscrape
+
+- **What it is:** `http://books.toscrape.com` — a public web-scraping **sandbox**
+  operated by Zyte (the Scrapy maintainers) that exists specifically for people
+  to practise scraping against. This is the framework's first real live target.
+- **ToS review:** the site is published as a sandbox whose stated purpose is to
+  be scraped; there is no prohibition on programmatic access. Content is
+  fictional book catalogue data generated for the sandbox.
+- **robots.txt:** permissive; the catalogue pages we fetch are not disallowed.
+  We fetch individual product pages politely (default rate limit), not a crawl.
+- **Personal data:** none — invented book listings, no user data.
+- **Anti-bot countermeasures:** none needed and none used (tier `open`).
+- **Decision:** **allowed** (public scraping sandbox, explicitly intended for this).
+- **Approver:** Sanket Adhav · **Date:** 2026-07-20
+
+> Draft-only note: `plugins/amfi_circulars`, `plugins/sebi_circulars`, and
+> `plugins/sebi_gazette` are **work-in-progress config drafts** targeting Indian
+> regulator sites (AMFI, SEBI). They use a `manifest.yaml` (not `plugin.yaml`),
+> so the plugin loader does NOT load them yet, and they have **no approval
+> entry**. Before any of them becomes a live plugin, it needs (a) a real
+> ToS/robots.txt/public-data review recorded here, and (b) rename to
+> `plugin.yaml` with a valid `source_approval` reference.

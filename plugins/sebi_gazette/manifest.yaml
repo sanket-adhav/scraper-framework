@@ -1,0 +1,7 @@
+name: sebi_gazette
+version: 0.1.0
+description: "Scrapes SEBI Gazette Notifications from the gazette listing page"
+tier: open
+source_approval: "docs/source_approval.md#sebi_gazette"
+config_files:
+  - config/extraction.yaml

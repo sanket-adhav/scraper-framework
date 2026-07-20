@@ -8,12 +8,14 @@ this file is where the two sides meet.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 from components.extractors.spec_driven import SpecDrivenExtractor
 from components.fetchers.http_fetcher import HttpFetcher
 from components.fetchers.local_file_fetcher import LocalFileFetcher
 from components.fetchers.playwright_fetcher import PlaywrightFetcher
+from components.listeners.logging_listener import LoggingListener
+from components.listeners.metrics_listener import MetricsListener
 from components.middleware.block_detection import BlockDetectionMiddleware
 from components.middleware.caching import CachingMiddleware
 from components.middleware.circuit_breaker import CircuitBreakerMiddleware
@@ -24,13 +26,16 @@ from components.middleware.proxy_rotation import ProxyRotationMiddleware
 from components.middleware.rate_limiter import RateLimiterMiddleware
 from components.middleware.retry import RetryMiddleware
 from components.middleware.ua_rotation import UaRotationMiddleware
+from components.parsers.auto_parser import AutoParser
 from components.parsers.html_parser import HtmlParser
 from components.parsers.json_parser import JsonParser
 from components.parsers.pdf_parser import PdfParser
 from components.parsers.text_parser import TextParser
 from components.parsers.xml_parser import XmlParser
 from components.repositories.csv_repository import CsvRepository
+from components.repositories.file_repository import FileRepository
 from components.repositories.jsonl_repository import JsonlRepository
+from components.repositories.postgres_repository import PostgresRepository
 from components.stages.discover_stage import DiscoverStage
 from components.stages.extract_stage import ExtractStage
 from components.stages.fetch_stage import FetchStage
@@ -50,7 +55,9 @@ from components.validators.required_field import RequiredFieldValidator
 from components.validators.schema_validator import SchemaValidator
 from components.validators.type_validator import TypeValidator
 from core.config.schema import ExtractConfigModel
+from core.contracts.parser import Parser
 from core.errors.exceptions import ConfigError
+from core.events.bus import EventBus
 from core.registry.factories import build_component
 from core.registry.registry import Registry
 
@@ -66,6 +73,7 @@ def default_registry() -> Registry:
     registry.register("parser", "xml", XmlParser)
     registry.register("parser", "pdf", PdfParser)
     registry.register("parser", "text", TextParser)
+    registry.register("parser", "auto", AutoParser)
     registry.register("middleware", "rate_limit", RateLimiterMiddleware)
     registry.register("middleware", "retry", RetryMiddleware)
     registry.register("middleware", "block_detection", BlockDetectionMiddleware)
@@ -89,8 +97,20 @@ def default_registry() -> Registry:
     registry.register("transformer", "enum_mapper", EnumMapper)
     registry.register("transformer", "field_enricher", FieldEnricher)
     registry.register("repository", "csv", CsvRepository)
+    registry.register("repository", "file", FileRepository)
     registry.register("repository", "jsonl", JsonlRepository)
+    registry.register("repository", "postgres", PostgresRepository)
     return registry
+
+
+def build_event_bus(metrics: MetricsListener | None = None) -> tuple[EventBus, MetricsListener]:
+    """Builds an event bus with the default listeners attached: structured logging
+    and Prometheus metrics both run purely as subscribers (plan2.md §10)."""
+    bus = EventBus()
+    metrics = metrics or MetricsListener()
+    bus.subscribe("*", LoggingListener())
+    bus.subscribe("*", metrics)
+    return bus, metrics
 
 
 def build_fetch_stage(registry: Registry, config: Mapping[str, Any]) -> FetchStage:
@@ -107,11 +127,18 @@ def build_fetch_stage(registry: Registry, config: Mapping[str, Any]) -> FetchSta
 
 
 def build_parse_stage(registry: Registry, config: Mapping[str, Any]) -> ParseStage:
-    """Builds the parse stage from the config's declared parser."""
-    parser_name = config.get("parser")
-    if not parser_name:
-        raise ConfigError("pipeline has a parse stage but config declares no `parser`")
-    parser = build_component(registry, "parser", parser_name, config.get("parser_options"))
+    """Builds the parse stage from the config's declared parser.
+    Defaults to 'auto' which dynamically routes by content-type."""
+    parser_name = config.get("parser", "auto")
+    parser: Parser
+    if parser_name == "auto":
+        # Build AutoParser with all known specialised parsers injected. It
+        # satisfies the runtime Parser protocol; the cast is only needed because
+        # its content_types/document_type are ClassVars (mypy strictness).
+        specialised = [HtmlParser(), PdfParser(), JsonParser(), XmlParser(), TextParser()]
+        parser = cast(Parser, AutoParser(parsers=specialised))
+    else:
+        parser = build_component(registry, "parser", parser_name, config.get("parser_options"))
     return ParseStage(parser)
 
 

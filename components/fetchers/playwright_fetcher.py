@@ -70,8 +70,41 @@ class PlaywrightFetcher:
         self._lock = asyncio.Lock()
 
     async def fetch(self, request: ScrapeRequest) -> Response:
-        """Opens a page in a pooled context, navigates, and returns the rendered HTML."""
+        """Opens a page in a pooled context, navigates, and returns the rendered HTML.
+        If the target URL is a PDF or uploads path, bypasses browser navigation and
+        fetches it directly using httpx to prevent browser download timeouts."""
         started = time.monotonic()
+
+        # Intercept direct binary/PDF files to fetch them efficiently via HTTP
+        url_lower = request.url.lower()
+        if url_lower.split("?")[0].endswith(".pdf") or "/uploads/" in url_lower:
+            import httpx
+
+            try:
+                headers = dict(request.headers)
+                # Ensure the User-Agent is passed
+                if "User-Agent" not in headers and self._context_options.get("user_agent"):
+                    headers["User-Agent"] = self._context_options["user_agent"]
+
+                async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+                    reply = await client.get(
+                        request.url, headers=headers, cookies=dict(request.cookies)
+                    )
+                    content_type = reply.headers.get("content-type", "application/pdf")
+                    ct = content_type.split(";")[0].strip() if content_type else "application/pdf"
+                    return Response(
+                        status=reply.status_code,
+                        headers=dict(reply.headers),
+                        body=reply.content,
+                        elapsed_ms=(time.monotonic() - started) * 1000,
+                        content_type=ct,
+                    )
+            except Exception as err:
+                raise FetchError(
+                    f"{request.url}: direct HTTP download of binary URL failed: {err!r}",
+                    transient=True,
+                ) from err
+
         pooled = await self._acquire_context(request)
         page = await pooled.context.new_page()
         try:

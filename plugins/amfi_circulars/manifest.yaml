@@ -1,0 +1,7 @@
+name: amfi_circulars
+version: 0.1.0
+description: "Scrapes AMFI Best Practice circulars and guidelines from amfiindia.com"
+tier: open
+source_approval: "docs/source_approval.md#amfi_circulars"
+config_files:
+  - config/extraction.yaml

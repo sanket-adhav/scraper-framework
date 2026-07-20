@@ -73,9 +73,10 @@ transform:
 
 persist:
   repositories:
-    - name: csv
+    - name: postgres
       options:
-        path: "output/ecommerce_example.csv"
+        dsn: "secret://env/DATABASE_URL"
+        table: "ecommerce_example"
         mode: upsert
         key_fields: [sku]
 

@@ -1,0 +1,94 @@
+# SEBI Circulars — scrapes circulars, guidelines, orders, and regulations
+# from the SEBI "All Listing" page. Discovers PDF links and saves them to disk.
+#
+# Source: https://www.sebi.gov.in/sebiweb/home/HomeAction.do?doListingAll=yes
+# Replaces: Compliance/backend/common_scrapers/sebi_scraper.py (527 lines)
+
+pipeline: [fetch, parse, discover, extract, validate, transform, persist]
+
+urls:
+  - "https://www.sebi.gov.in/sebiweb/home/HomeAction.do?doListingAll=yes"
+
+# No parser declared — AutoParser handles HTML and PDF dynamically
+
+fetcher: http
+fetcher_options:
+  timeout_s: 30
+  default_headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+    Accept-Language: "en-US,en;q=0.9"
+    Referer: "https://www.sebi.gov.in/"
+
+middleware:
+  - retry
+  - rate_limit
+
+middleware_options:
+  retry:
+    max_attempts: 3
+  rate_limit:
+    rate: 1.0
+
+engine:
+  max_requests: 5
+
+plugin:
+  name: sebi_circulars
+  version: 0.1.0
+
+# Discovers the HTML detail pages from the list table
+discover:
+  next_url:
+    kind: xpath
+    query: "//table[@id='sample_1']//tr/td[3]/a/@href"
+
+# Extraction runs on the detail HTML page
+extract:
+  schema_version: "1"
+  spec:
+    date:
+      kind: css
+      query: "div.date_value h5"
+      cleanup: [collapse_whitespace, strip]
+    type:
+      kind: xpath
+      query: "//ol[@class='cfc-breadcrumb']/li[last()]/text()"
+      cleanup: [collapse_whitespace, strip]
+    title:
+      kind: css
+      query: "section.department-slider h1"
+      cleanup: [collapse_whitespace, strip]
+    pdf_link:
+      kind: xpath
+      query: "//iframe/@src"
+
+validate:
+  validators:
+    - name: required_field
+      options: {fields: [date, title, pdf_link]}
+
+# Skip extraction and validation errors for the main listing page (which doesn't have detail fields)
+error_policy:
+  stages:
+    extract:
+      ExtractionError: skip
+    validate:
+      ValidationError: skip
+    transform:
+      TransformError: skip
+    persist:
+      PersistError: skip
+
+persist:
+  repositories:
+    - name: file
+      options:
+        output_dir: "output/pdfs/sebi"
+        url_field: "pdf_link"
+        filename_field: "title"
+    - name: jsonl
+      options:
+        path: "output/sebi_circulars.jsonl"
+        mode: upsert
+        key_fields: [title]

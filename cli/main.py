@@ -9,11 +9,13 @@ import asyncio
 import json
 from pathlib import Path
 
+import dotenv
 import typer
 
-from cli.composition import default_registry, register_default_stages
+from cli.composition import build_event_bus, default_registry, register_default_stages
 from cli.scaffold import scaffold_plugin
 from components.quarantine.file_sink import FileQuarantineSink
+from components.secrets.env_provider import EnvSecretsProvider
 from core.config.loader import ConfigLayer, ResolvedConfig, load_config
 from core.engine.job import ScrapeJob
 from core.engine.scraper_engine import JobResult, ScraperEngine
@@ -43,13 +45,19 @@ def _layers(job_file: Path | None, config_dir: Path) -> list[ConfigLayer]:
 def _load_validated(job_file: Path | None, config_dir: Path) -> tuple[ResolvedConfig, Registry]:
     """Loads config in two passes: shape first, then full name/capability checks
     once the config-wired stages are registered."""
+    dotenv.load_dotenv()
     layers = _layers(job_file, config_dir)
     presets = config_dir / "presets"
-    config = load_config(layers, presets_dir=presets if presets.exists() else None)
+
+    provider = EnvSecretsProvider()
+    presets_dir = presets if presets.exists() else None
+    config = load_config(layers, presets_dir=presets_dir, secrets=provider)
+
     registry = default_registry()
     register_default_stages(registry, config.data)
+
     config = load_config(
-        layers, presets_dir=presets if presets.exists() else None, registry=registry
+        layers, presets_dir=presets_dir, registry=registry, secrets=provider
     )
     return config, registry
 
@@ -57,16 +65,19 @@ def _load_validated(job_file: Path | None, config_dir: Path) -> tuple[ResolvedCo
 def _build_engine(
     config: ResolvedConfig, registry: Registry, stage_names: list[str]
 ) -> ScraperEngine:
-    """Assembles runner + engine for the given stage list."""
+    """Assembles runner + engine for the given stage list, with logging + metrics
+    listeners attached to the event bus."""
     stages = build_pipeline(stage_names, registry)
     quarantine_dir = str(config.data.get("quarantine_dir", "quarantine"))
+    bus, _ = build_event_bus()
     runner = PipelineRunner(
         stages,
         policy_from_config(config.data),
         timeouts=config.data.get("stage_timeouts", {}),
         quarantine=FileQuarantineSink(quarantine_dir),
+        bus=bus,
     )
-    return ScraperEngine(runner, config)
+    return ScraperEngine(runner, config, bus=bus)
 
 
 def _job_from_config(config: ResolvedConfig) -> ScrapeJob:
