@@ -32,3 +32,22 @@ class FileQuarantineSink:
         )
         with self._path.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
+
+    def read_all(self) -> list[dict[str, object]]:
+        """Reads back all quarantined records (for the `scraper quarantine` CLI)."""
+        if not self._path.exists():
+            return []
+        with self._path.open(encoding="utf-8") as f:
+            return [json.loads(line) for line in f if line.strip()]
+
+    def discard_all(self) -> int:
+        """Clears the needs-review pile after the operator has dealt with it."""
+        records = self.read_all()
+        self._path.write_text("", encoding="utf-8")
+        return len(records)
+
+    def rewrite(self, records: list[dict[str, object]]) -> None:
+        """Replaces the pile with the given records (used by selective retry/discard)."""
+        with self._path.open("w", encoding="utf-8") as f:
+            for record in records:
+                f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")

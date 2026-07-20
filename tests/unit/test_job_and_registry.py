@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from core.engine.job import ScrapeJob
 from core.models import ScrapeRequest
+from core.models.job import ScrapeJob
 from core.registry.factories import build_component
 from core.registry.registry import DuplicateComponentError, Registry, UnknownComponentError
 

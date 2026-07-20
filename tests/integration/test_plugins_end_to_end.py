@@ -15,10 +15,10 @@ from typer.testing import CliRunner
 from cli.composition import default_registry, register_default_stages
 from cli.main import app
 from core.config.loader import load_config
-from core.engine.job import ScrapeJob
 from core.engine.scraper_engine import ScraperEngine
 from core.errors.policy import policy_from_config
 from core.models import ScrapeRequest
+from core.models.job import ScrapeJob
 from core.pipeline.builder import build_pipeline
 from core.pipeline.runner import PipelineRunner
 

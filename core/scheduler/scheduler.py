@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from core.engine.job import ScrapeJob
+from core.models.job import ScrapeJob
 
 
 @runtime_checkable

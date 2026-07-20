@@ -1,23 +1,28 @@
 """The Scraper Engine: takes a job, runs each request through the pipeline,
 and feeds discovered requests (pagination, crawling) back into the work queue.
 
-In Phase 1 the queue is an in-process deque; Plan 09 swaps it for a durable
-queue without changing this engine.
+Same engine for both modes (plan2.md §16): with no `discovered_sink` it drains
+discovered requests in an in-process deque (single-process mode); with a sink
+(a queue's submit) it hands discovered requests off as new jobs, so N workers
+share the crawl — a config flag, not a code change.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from core.config.loader import ResolvedConfig
-from core.engine.job import ScrapeJob
 from core.events.bus import EventBus
 from core.events.types import JOB_COMPLETED, JOB_STARTED, Event
+from core.models.job import ScrapeJob
 from core.models.scrape_request import ScrapeRequest
 from core.pipeline.context import Context
 from core.pipeline.runner import PipelineResult, PipelineRunner, PipelineStatus
+
+DiscoveredSink = Callable[[ScrapeRequest], Awaitable[None]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,16 +45,20 @@ class ScraperEngine:
         config: ResolvedConfig,
         *,
         bus: EventBus | None = None,
+        discovered_sink: DiscoveredSink | None = None,
     ) -> None:
-        """Stores the ready-built pipeline runner, the resolved config, and the bus."""
+        """Stores the pipeline runner, config, bus, and an optional sink for
+        discovered requests (a queue's submit) that enables distributed mode."""
         self._runner = runner
         self._config = config
         self._bus = bus or EventBus()
+        self._discovered_sink = discovered_sink
         engine_cfg = config.data.get("engine") or {}
         self._max_requests = int(engine_cfg.get("max_requests", 1000))
 
     async def run(self, job: ScrapeJob) -> JobResult:
-        """Runs every request in the job (plus discovered ones) and returns the summary."""
+        """Runs every request in the job and returns the summary. Discovered
+        requests either drain in-process (no sink) or go to the queue (sink set)."""
         self._bus.publish(Event(JOB_STARTED, {"job_id": job.job_id}))
         pending: deque[ScrapeRequest] = deque(job.requests)
         results: list[PipelineResult] = []
@@ -66,7 +75,11 @@ class ScraperEngine:
             result = await self._runner.run(ctx)
             results.append(result)
             counts[result.status] += 1
-            pending.extend(result.context.discovered_requests)
+            if self._discovered_sink is None:
+                pending.extend(result.context.discovered_requests)
+            else:
+                for discovered in result.context.discovered_requests:
+                    await self._discovered_sink(discovered)
 
         summary = JobResult(
             job_id=job.job_id,

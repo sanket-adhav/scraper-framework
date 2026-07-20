@@ -84,6 +84,7 @@ def default_registry() -> Registry:
     registry.register("middleware", "ua_rotation", UaRotationMiddleware)
     registry.register("middleware", "cookie_manager", CookieManagerMiddleware)
     registry.register("middleware", "cost_tracker", CostTrackerMiddleware)
+    registry.register("middleware", "distributed_rate_limit", _build_distributed_rate_limit)
     registry.register("extractor", "spec_driven", SpecDrivenExtractor)
     registry.register("validator", "required_field", RequiredFieldValidator)
     registry.register("validator", "type", TypeValidator)
@@ -101,6 +102,24 @@ def default_registry() -> Registry:
     registry.register("repository", "jsonl", JsonlRepository)
     registry.register("repository", "postgres", PostgresRepository)
     return registry
+
+
+def _build_distributed_rate_limit(
+    dsn: str = "", rate: float = 1.0, burst: float = 1.0
+) -> Any:
+    """Builds the Postgres-shared rate limiter; DSN falls back to DATABASE_URL."""
+    import os
+
+    from components.middleware.distributed_rate_limiter import (
+        DistributedRateLimiterMiddleware,
+        PostgresTokenBucketStore,
+    )
+
+    resolved = dsn or os.environ.get("DATABASE_URL", "")
+    if not resolved:
+        raise ConfigError("distributed_rate_limit needs a Postgres dsn or DATABASE_URL")
+    store = PostgresTokenBucketStore(resolved)
+    return DistributedRateLimiterMiddleware(store, rate=rate, burst=burst)
 
 
 def build_event_bus(metrics: MetricsListener | None = None) -> tuple[EventBus, MetricsListener]:

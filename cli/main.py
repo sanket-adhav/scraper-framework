@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import dotenv
@@ -17,10 +18,10 @@ from cli.scaffold import scaffold_plugin
 from components.quarantine.file_sink import FileQuarantineSink
 from components.secrets.env_provider import EnvSecretsProvider
 from core.config.loader import ConfigLayer, ResolvedConfig, load_config
-from core.engine.job import ScrapeJob
 from core.engine.scraper_engine import JobResult, ScraperEngine
 from core.errors.exceptions import ConfigError, ScraperError
 from core.errors.policy import policy_from_config
+from core.models.job import ScrapeJob
 from core.models.scrape_request import ScrapeRequest
 from core.pipeline.builder import build_pipeline
 from core.pipeline.runner import PipelineRunner
@@ -63,10 +64,14 @@ def _load_validated(job_file: Path | None, config_dir: Path) -> tuple[ResolvedCo
 
 
 def _build_engine(
-    config: ResolvedConfig, registry: Registry, stage_names: list[str]
+    config: ResolvedConfig,
+    registry: Registry,
+    stage_names: list[str],
+    *,
+    discovered_sink: object = None,
 ) -> ScraperEngine:
     """Assembles runner + engine for the given stage list, with logging + metrics
-    listeners attached to the event bus."""
+    listeners attached to the event bus. A discovered_sink switches on queue mode."""
     stages = build_pipeline(stage_names, registry)
     quarantine_dir = str(config.data.get("quarantine_dir", "quarantine"))
     bus, _ = build_event_bus()
@@ -77,7 +82,18 @@ def _build_engine(
         quarantine=FileQuarantineSink(quarantine_dir),
         bus=bus,
     )
-    return ScraperEngine(runner, config, bus=bus)
+    return ScraperEngine(runner, config, bus=bus, discovered_sink=discovered_sink)  # type: ignore[arg-type]
+
+
+def _queue_dsn(config: ResolvedConfig) -> str:
+    """Resolves the queue's Postgres DSN from config `queue.dsn` or DATABASE_URL."""
+    queue_cfg = config.data.get("queue") or {}
+    dsn = queue_cfg.get("dsn") or os.environ.get("DATABASE_URL")
+    if not dsn:
+        raise ConfigError(
+            "worker mode needs a Postgres queue: set `queue.dsn` or DATABASE_URL"
+        )
+    return str(dsn)
 
 
 def _job_from_config(config: ResolvedConfig) -> ScrapeJob:
@@ -149,6 +165,144 @@ def dry_run(
         if record is not None:
             typer.echo(json.dumps(dict(record.data), ensure_ascii=False, default=str))
     _echo_summary(result)
+
+
+@app.command()
+def submit(
+    job_file: Path = typer.Argument(..., help="Job YAML whose seed URLs to enqueue"),
+    config_dir: Path = typer.Option(Path("config"), help="Directory with default YAMLs"),
+) -> None:
+    """Enqueues a job's seed URLs onto the Postgres queue for workers to pick up."""
+    from components.queue.postgres_queue import PostgresQueue
+
+    try:
+        config, _ = _load_validated(job_file, config_dir)
+        queue = PostgresQueue(_queue_dsn(config))
+        job = _job_from_config(config)
+        asyncio.run(queue.submit(job))
+    except ScraperError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(code=1) from err
+    typer.echo(f"submitted job {job.job_id} ({len(job.requests)} seed requests)")
+
+
+@app.command()
+def worker(
+    job_file: Path = typer.Argument(None, help="Optional job YAML to enqueue before working"),
+    config_dir: Path = typer.Option(Path("config"), help="Directory with default YAMLs"),
+    once: bool = typer.Option(False, help="Drain the queue and exit (else run forever)"),
+) -> None:
+    """Runs a queue worker: the SAME engine, but jobs come from the Postgres queue
+    and discovered requests go back to it — config/flag only, no code change."""
+    from components.queue.postgres_queue import PostgresQueue
+    from core.engine.worker import Worker, queue_discovered_sink
+
+    try:
+        config, registry = _load_validated(job_file, config_dir)
+        queue = PostgresQueue(_queue_dsn(config))
+        engine = _build_engine(
+            config, registry, list(config.data["pipeline"]),
+            discovered_sink=queue_discovered_sink(queue),
+        )
+        worker_obj = Worker(queue, engine)
+
+        async def _go() -> None:
+            """Enqueues the seed job (if given) then drains or runs the worker loop."""
+            if job_file is not None and config.data.get("urls"):
+                await queue.submit(_job_from_config(config))
+            stats = await (worker_obj.drain() if once else worker_obj.run_forever())
+            typer.echo(f"worker done: {stats.acked} acked, {stats.nacked} nacked")
+
+        asyncio.run(_go())
+    except ScraperError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(code=1) from err
+
+
+quarantine_app = typer.Typer(help="Inspect and manage the needs-review pile.", no_args_is_help=True)
+app.add_typer(quarantine_app, name="quarantine")
+
+
+@quarantine_app.command("list")
+def quarantine_list(
+    quarantine_dir: Path = typer.Option(Path("quarantine"), help="Quarantine directory"),
+) -> None:
+    """Lists quarantined records (trace id, stage, error)."""
+    records = FileQuarantineSink(quarantine_dir).read_all()
+    if not records:
+        typer.echo("quarantine is empty")
+        return
+    for rec in records:
+        typer.echo(f"{rec.get('trace_id')} [{rec.get('stage')}] {rec.get('error_type')}: "
+                   f"{str(rec.get('error_message'))[:80]}")
+    typer.echo(f"— {len(records)} quarantined records")
+
+
+@quarantine_app.command("inspect")
+def quarantine_inspect(
+    trace_id: str = typer.Argument(..., help="Trace id of the record to inspect"),
+    quarantine_dir: Path = typer.Option(Path("quarantine"), help="Quarantine directory"),
+) -> None:
+    """Prints the full snapshot of one quarantined record."""
+    for rec in FileQuarantineSink(quarantine_dir).read_all():
+        if rec.get("trace_id") == trace_id:
+            typer.echo(json.dumps(rec, indent=2, ensure_ascii=False, default=str))
+            return
+    typer.echo(f"no quarantined record with trace_id {trace_id}", err=True)
+    raise typer.Exit(code=1)
+
+
+@quarantine_app.command("retry")
+def quarantine_retry(
+    plugin: str = typer.Option(None, help="Only re-queue records from this plugin"),
+    config_dir: Path = typer.Option(Path("config"), help="Directory with default YAMLs"),
+    quarantine_dir: Path = typer.Option(Path("quarantine"), help="Quarantine directory"),
+) -> None:
+    """Re-queues quarantined records' URLs onto the Postgres queue after a fix, then
+    clears them from the pile. Filter by --plugin to retry just one plugin's jobs."""
+    from components.queue.postgres_queue import PostgresQueue
+
+    sink = FileQuarantineSink(quarantine_dir)
+    records = sink.read_all()
+    retryable, kept = [], []
+    for rec in records:
+        snap = rec.get("context_snapshot") or {}
+        url = snap.get("url") if isinstance(snap, dict) else None
+        if url and (plugin is None or (isinstance(snap, dict) and snap.get("plugin") == plugin)):
+            retryable.append((rec, url))
+        else:
+            kept.append(rec)
+    if not retryable:
+        typer.echo("nothing to retry")
+        return
+    try:
+        dsn = os.environ.get("DATABASE_URL") or (
+            (load_config([config_dir / "pipeline.yaml"]).data.get("queue") or {}).get("dsn")
+        )
+        if not dsn:
+            raise ConfigError("retry needs a Postgres queue: set DATABASE_URL or queue.dsn")
+        queue = PostgresQueue(str(dsn))
+
+        async def _requeue() -> None:
+            """Submits one job per retryable quarantined URL."""
+            for _rec, url in retryable:
+                await queue.submit(ScrapeJob(requests=(ScrapeRequest(url=str(url)),)))
+
+        asyncio.run(_requeue())
+    except ScraperError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(code=1) from err
+    sink.rewrite(kept)
+    typer.echo(f"re-queued {len(retryable)} records; {len(kept)} remain in quarantine")
+
+
+@quarantine_app.command("discard")
+def quarantine_discard(
+    quarantine_dir: Path = typer.Option(Path("quarantine"), help="Quarantine directory"),
+) -> None:
+    """Clears the entire needs-review pile."""
+    n = FileQuarantineSink(quarantine_dir).discard_all()
+    typer.echo(f"discarded {n} quarantined records")
 
 
 @app.command("list-components")
