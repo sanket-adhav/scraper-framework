@@ -1,0 +1,82 @@
+# MAS Circulars — Monetary Authority of Singapore (MAS) Circulars scraper plugin.
+# Scrapes Financial Adviser Circulars and downloads PDFs to local disk.
+#
+# Source: https://www.mas.gov.sg/regulation/regulations-and-guidance?entity_type=Financial%20Adviser&page=1&content_type=Circulars
+
+pipeline: [fetch, parse, discover, extract, validate, transform, persist]
+
+urls:
+  - "https://www.mas.gov.sg/regulation/regulations-and-guidance?entity_type=Financial%20Adviser&page=1&content_type=Circulars"
+
+fetcher: playwright
+fetcher_options:
+  timeout_s: 60
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+  wait_after_s: 4.0
+
+middleware:
+  - retry
+  - rate_limit
+
+middleware_options:
+  retry:
+    max_attempts: 3
+  rate_limit:
+    rate: 1.0
+
+engine:
+  max_requests: 5
+
+plugin:
+  name: mas_circulars
+  version: 0.1.0
+
+discover:
+  next_url:
+    kind: xpath
+    query: "//a[contains(@href, '/regulation/circulars/')]/@href"
+
+extract:
+  schema_version: "1"
+  spec:
+    title:
+      kind: css
+      query: "h1.mas-text-h1"
+      cleanup: [collapse_whitespace, strip]
+    date:
+      kind: regex
+      query: "([0-9]{1,2}\\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)\\s+[0-9]{4})"
+      cleanup: [collapse_whitespace, strip]
+      required: false
+    pdf_link:
+      kind: xpath
+      query: "//a[contains(@href, '.pdf')]/@href"
+
+validate:
+  validators:
+    - name: required_field
+      options: {fields: [title, pdf_link]}
+
+error_policy:
+  stages:
+    extract:
+      ExtractionError: skip
+    validate:
+      ValidationError: skip
+    transform:
+      TransformError: skip
+    persist:
+      PersistError: skip
+
+persist:
+  repositories:
+    - name: file
+      options:
+        output_dir: "output/pdfs/mas"
+        url_field: "pdf_link"
+        filename_field: "title"
+    - name: jsonl
+      options:
+        path: "output/mas_circulars.jsonl"
+        mode: upsert
+        key_fields: [title]

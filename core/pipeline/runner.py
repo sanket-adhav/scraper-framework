@@ -160,16 +160,34 @@ class PipelineRunner:
 
     def _emit(self, event_type: str, ctx: Context, stage: Stage, **extra: object) -> None:
         """Publishes one pipeline event with the trace id and stage name attached."""
-        payload: dict[str, object] = {"trace_id": ctx.trace_id, "stage": stage.name, **extra}
+        payload: dict[str, object] = {
+            "trace_id": ctx.trace_id,
+            "stage": stage.name,
+            "url": ctx.request.url if ctx.request else None,
+            **extra
+        }
         self._bus.publish(Event(type=event_type, payload=payload))
 
     def _emit_domain_success(self, ctx: Context, stage: Stage) -> None:
         """Emits high-level events after a stage completes, read from the context —
         record.extracted / record.saved, so metrics don't couple to stage code."""
         if ctx.record is not None and stage.name == "extract":
-            self._emit(RECORD_EXTRACTED, ctx, stage, plugin=_plugin_of(ctx))
+            self._emit(
+                RECORD_EXTRACTED,
+                ctx,
+                stage,
+                plugin=_plugin_of(ctx),
+                title=ctx.record.data.get("title"),
+            )
         elif ctx.record is not None and stage.name == "persist":
-            self._emit(RECORD_SAVED, ctx, stage, plugin=_plugin_of(ctx))
+            self._emit(
+                RECORD_SAVED,
+                ctx,
+                stage,
+                plugin=_plugin_of(ctx),
+                title=ctx.record.data.get("title"),
+                filepath=ctx.record.data.get("filepath"),
+            )
 
     def _emit_domain_failure(self, ctx: Context, stage: Stage, error: ScraperError) -> None:
         """Emits high-level failure events by error TYPE (not stage name): a block or
@@ -184,6 +202,7 @@ class PipelineRunner:
                 stage,
                 plugin=_plugin_of(ctx),
                 fields=[f.field for f in failures],
+                has_record=ctx.record is not None,
             )
 
 

@@ -15,6 +15,7 @@ from components.fetchers.http_fetcher import HttpFetcher
 from components.fetchers.local_file_fetcher import LocalFileFetcher
 from components.fetchers.playwright_fetcher import PlaywrightFetcher
 from components.listeners.logging_listener import LoggingListener
+from components.listeners.console_listener import ConsoleFeedbackListener
 from components.listeners.metrics_listener import MetricsListener
 from components.middleware.block_detection import BlockDetectionMiddleware
 from components.middleware.caching import CachingMiddleware
@@ -128,6 +129,7 @@ def build_event_bus(metrics: MetricsListener | None = None) -> tuple[EventBus, M
     bus = EventBus()
     metrics = metrics or MetricsListener()
     bus.subscribe("*", LoggingListener())
+    bus.subscribe("*", ConsoleFeedbackListener())
     bus.subscribe("*", metrics)
     return bus, metrics
 

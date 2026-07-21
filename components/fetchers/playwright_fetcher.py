@@ -43,6 +43,8 @@ class PlaywrightFetcher:
         recycle_after: int = 20,
         timeout_s: float = 30.0,
         wait_until: str = "load",
+        wait_selector: str | None = None,
+        wait_after_s: float = 0.0,
         viewport: Mapping[str, int] | None = None,
         locale: str = "en-US",
         timezone: str | None = None,
@@ -55,6 +57,8 @@ class PlaywrightFetcher:
         self._recycle_after = max(1, recycle_after)
         self._timeout_ms = timeout_s * 1000
         self._wait_until = wait_until
+        self._wait_selector = wait_selector
+        self._wait_after_s = max(0.0, wait_after_s)
         self._context_options: dict[str, Any] = {
             "locale": locale,
             "java_script_enabled": java_script_enabled,
@@ -111,6 +115,10 @@ class PlaywrightFetcher:
             reply = await page.goto(
                 request.url, wait_until=self._wait_until, timeout=self._timeout_ms
             )
+            if self._wait_selector:
+                await page.wait_for_selector(self._wait_selector, timeout=self._timeout_ms)
+            if self._wait_after_s > 0:
+                await asyncio.sleep(self._wait_after_s)
             body = (await page.content()).encode("utf-8")
             status = reply.status if reply is not None else 200
             headers = dict(reply.headers) if reply is not None else {}

@@ -20,8 +20,16 @@ class LoggingListener:
         self._logger = logging.getLogger(logger_name)
 
     def __call__(self, event: Event) -> None:
-        """Logs the event type and payload at a level matching its severity."""
-        level = logging.WARNING if _is_bad(event.type) else logging.INFO
+        """Logs the event type and payload at a level matching its severity.
+        If a stage failure was skipped gracefully per error policy, downgrade to INFO."""
+        is_warning = _is_bad(event.type)
+        if is_warning and (
+            event.payload.get("action") == "skip"
+            or (event.type == "validation.failed" and not event.payload.get("has_record"))
+        ):
+            is_warning = False
+            
+        level = logging.WARNING if is_warning else logging.INFO
         self._logger.log(
             level, "event %s", event.type, extra={"event": event.type, **dict(event.payload)}
         )

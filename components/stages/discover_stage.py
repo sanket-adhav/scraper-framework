@@ -45,6 +45,9 @@ class DiscoverStage:
                 continue
             url = self._url_template.format(value=text) if self._url_template else text
             origin = ctx.request.url if ctx.request else ""
+            from urllib.parse import urljoin
+            if origin and not url.startswith(("http://", "https://")):
+                url = urljoin(origin, url)
             ctx.discovered_requests.append(
                 ScrapeRequest(url=url, metadata={"discovered_from": origin})
             )
