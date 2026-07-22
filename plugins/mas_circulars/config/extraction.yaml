@@ -80,3 +80,9 @@ persist:
         path: "output/mas_circulars.jsonl"
         mode: upsert
         key_fields: [title]
+    - name: json
+      options:
+        path: "output/mas_circulars.json"
+        mode: upsert
+        key_fields: [title]
+        indent: 2

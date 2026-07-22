@@ -35,6 +35,7 @@ from components.parsers.text_parser import TextParser
 from components.parsers.xml_parser import XmlParser
 from components.repositories.csv_repository import CsvRepository
 from components.repositories.file_repository import FileRepository
+from components.repositories.json_repository import JsonRepository
 from components.repositories.jsonl_repository import JsonlRepository
 from components.repositories.postgres_repository import PostgresRepository
 from components.stages.discover_stage import DiscoverStage
@@ -100,6 +101,7 @@ def default_registry() -> Registry:
     registry.register("transformer", "field_enricher", FieldEnricher)
     registry.register("repository", "csv", CsvRepository)
     registry.register("repository", "file", FileRepository)
+    registry.register("repository", "json", JsonRepository)
     registry.register("repository", "jsonl", JsonlRepository)
     registry.register("repository", "postgres", PostgresRepository)
     return registry
