@@ -1,5 +1,5 @@
 """Plain text as a Document: the fallback for text/plain responses (plan2.md §5)."""
-
+# stores text data
 from __future__ import annotations
 
 from collections.abc import Mapping

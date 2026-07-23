@@ -1,0 +1,10 @@
+name: amazon_products
+version: 0.1.0
+description: "Amazon Best Sellers products scraper plugin."
+author: Scraper Framework Team
+entrypoint: config/extraction.yaml
+capabilities:
+  - fetcher:playwright
+  - parser:auto
+  - repository:json
+  - repository:csv

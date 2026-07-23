@@ -70,8 +70,9 @@ persist:
         output_dir: "output/pdfs/amfi"
         url_field: "pdf_link"
         filename_field: "title"
-    - name: jsonl
+    - name: json
       options:
-        path: "output/amfi_circulars.jsonl"
+        path: "output/amfi_circulars.json"
         mode: upsert
         key_fields: [title]
+        indent: 2

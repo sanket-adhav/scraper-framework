@@ -75,11 +75,6 @@ persist:
         output_dir: "output/pdfs/mas"
         url_field: "pdf_link"
         filename_field: "title"
-    - name: jsonl
-      options:
-        path: "output/mas_circulars.jsonl"
-        mode: upsert
-        key_fields: [title]
     - name: json
       options:
         path: "output/mas_circulars.json"

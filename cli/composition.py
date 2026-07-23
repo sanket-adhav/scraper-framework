@@ -1,5 +1,5 @@
 """The composition root: the one place that knows both core and components.
-
+connects to the stage names fields.
 Registers every built-in component into a Registry and wires the config-driven
 stages together. The CLI builds on this; core never imports components, so
 this file is where the two sides meet.

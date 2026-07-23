@@ -2,7 +2,7 @@
 
 Everything a scrape needs comes from YAML; the CLI only assembles and runs it.
 """
-
+# handles terminal commands for user interface
 from __future__ import annotations
 
 import asyncio

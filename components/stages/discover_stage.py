@@ -4,7 +4,7 @@ in the current document and hands them back to the engine (plan2.md §4).
 Pagination is data flowing through the pipeline — never a method to override.
 A page that yields no match simply ends the chain.
 """
-
+# finds next page url from the current page using selector
 from __future__ import annotations
 
 from collections.abc import Mapping
