@@ -1,0 +1,87 @@
+# ==============================================================================
+# AMS — Carriers grid (§8 carrier relationships & appointments)
+# Source: /Carriers — FluentUI data grid, single page at current volumes.
+# ==============================================================================
+
+pipeline: [fetch, parse, extract, validate, transform, persist]
+
+urls:
+  - "http://localhost:5577/Carriers"
+
+fetcher: authenticated_playwright
+fetcher_options:
+  login_url: "http://localhost:5577/Account/Login"
+  username: "secret://env/AMS_EMAIL"
+  password: "secret://env/AMS_PASSWORD"
+  username_selector: 'input[name="Input.Email"]'
+  password_selector: 'input[name="Input.Password"]'
+  submit_selector: 'button.submitbtn[type="submit"]'
+  logged_out_selector: 'input[name="Input.Password"]'
+  wait_selector: "table.fluent-data-grid tbody tr"
+  wait_after_s: 3.0
+  timeout_s: 60
+  paginate_next_selector: 'fluent-button[title="Go to next page"]:not([disabled])'
+  paginate_row_container: "table.fluent-data-grid tbody"
+  paginate_row_selector: "tr"
+  paginate_max_pages: 25
+
+parser: html
+
+extractor: table
+extractor_options:
+  collections:
+    carriers:
+      rows: '//table[contains(@class,"fluent-data-grid")]//tbody/tr'
+      columns:
+        - carrier_id
+        - carrier_name
+        - phone
+        - website
+        - tools
+        - street_address
+        - city
+        - state
+        - is_wholesaler
+
+extract:
+  schema_version: "1"
+  spec:
+    page_title:
+      kind: css
+      query: "title"
+      required: false
+      cleanup: [collapse_whitespace, strip]
+
+middleware:
+  - retry
+middleware_options:
+  retry:
+    max_attempts: 3
+
+engine:
+  max_requests: 2
+
+plugin:
+  name: ams_book_rolling
+  version: 0.1.0
+
+validate:
+  validators:
+    - name: required_field
+      options: {fields: [collections]}
+
+error_policy:
+  stages:
+    extract:
+      ExtractionError: skip
+    validate:
+      ValidationError: skip
+
+persist:
+  repositories:
+    - name: json
+      options:
+        path: "output/ams/carriers.json"
+        mode: upsert
+        key_fields: [source_url]
+        indent: 2

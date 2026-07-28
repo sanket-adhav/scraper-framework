@@ -29,6 +29,7 @@ class FileRepository:
         output_dir: str | Path = "output/pdfs",
         filename_field: str | None = None,
         url_field: str | None = None,
+        date_field: str | None = None,
         resolve_intermediate: bool = True,
     ) -> None:
         """Configures where files are saved.
@@ -37,11 +38,13 @@ class FileRepository:
             output_dir: Directory to save files into.
             filename_field: Optional field name to use for the file name.
             url_field: Optional field containing the URL to fetch/download the PDF from.
+            date_field: Optional field containing the extracted circular date.
             resolve_intermediate: Whether to parse intermediate HTML pages for iframes.
         """
         self._output_dir = Path(output_dir)
         self._filename_field = filename_field
         self._url_field = url_field
+        self._date_field = date_field
         self._resolve_intermediate = resolve_intermediate
 
     async def save(
@@ -211,11 +214,30 @@ class FileRepository:
             url_path = urlparse(str(raw_url or "")).path
             base = Path(url_path).stem if url_path else "document"
 
-        date_str = record.provenance.scraped_at.strftime("%Y-%m-%d")
+        date_str = None
+        if self._date_field and self._date_field in record.data:
+            raw_date = str(record.data[self._date_field])
+            date_str = _parse_date_prefix(raw_date)
+
+        if not date_str:
+            date_str = record.provenance.scraped_at.strftime("%Y-%m-%d")
+
         safe_base = _safe_filename(base)
 
         ext = ".pdf"  # Default for compliance files
         return f"{date_str}_{safe_base}{ext}"
+
+
+def _parse_date_prefix(raw_date: str) -> str | None:
+    """Parses date strings like 'Jul 21, 2026' or '2026-07-21' into YYYY-MM-DD."""
+    from datetime import datetime
+    for fmt in ("%b %d, %Y", "%d %b %Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+        try:
+            dt = datetime.strptime(raw_date.strip(), fmt)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
 
 
 def _safe_filename(text: str, max_len: int = 100) -> str:

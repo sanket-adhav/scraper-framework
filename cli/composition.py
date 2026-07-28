@@ -11,11 +11,13 @@ from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from components.extractors.spec_driven import SpecDrivenExtractor
+from components.extractors.table_extractor import TableExtractor
+from components.fetchers.authenticated_playwright_fetcher import AuthenticatedPlaywrightFetcher
 from components.fetchers.http_fetcher import HttpFetcher
 from components.fetchers.local_file_fetcher import LocalFileFetcher
 from components.fetchers.playwright_fetcher import PlaywrightFetcher
-from components.listeners.logging_listener import LoggingListener
 from components.listeners.console_listener import ConsoleFeedbackListener
+from components.listeners.logging_listener import LoggingListener
 from components.listeners.metrics_listener import MetricsListener
 from components.middleware.block_detection import BlockDetectionMiddleware
 from components.middleware.caching import CachingMiddleware
@@ -70,6 +72,7 @@ def default_registry() -> Registry:
     registry.register("fetcher", "http", HttpFetcher)
     registry.register("fetcher", "local_file", LocalFileFetcher)
     registry.register("fetcher", "playwright", PlaywrightFetcher)
+    registry.register("fetcher", "authenticated_playwright", AuthenticatedPlaywrightFetcher)
     registry.register("parser", "html", HtmlParser)
     registry.register("parser", "json", JsonParser)
     registry.register("parser", "xml", XmlParser)
@@ -88,6 +91,7 @@ def default_registry() -> Registry:
     registry.register("middleware", "cost_tracker", CostTrackerMiddleware)
     registry.register("middleware", "distributed_rate_limit", _build_distributed_rate_limit)
     registry.register("extractor", "spec_driven", SpecDrivenExtractor)
+    registry.register("extractor", "table", TableExtractor)
     registry.register("validator", "required_field", RequiredFieldValidator)
     registry.register("validator", "type", TypeValidator)
     registry.register("validator", "schema", SchemaValidator)
@@ -179,6 +183,9 @@ def build_extract_stage(registry: Registry, config: Mapping[str, Any]) -> Extrac
         {
             "plugin_name": str(plugin.get("name", "")),
             "plugin_version": str(plugin.get("version", "")),
+            # Extractors that need more than the spec (e.g. `table`) read their
+            # settings from here; `spec_driven` takes no options and ignores it.
+            **(config.get("extractor_options") or {}),
         },
     )
     return ExtractStage(extractor, spec)

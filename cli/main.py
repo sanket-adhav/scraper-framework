@@ -106,10 +106,13 @@ def _job_from_config(config: ResolvedConfig) -> ScrapeJob:
 
 def _echo_summary(result: JobResult) -> None:
     """Prints the one-line job outcome."""
-    typer.echo(
+    msg = (
         f"job {result.job_id}: {result.completed} completed, "
         f"{result.aborted} aborted, {result.quarantined} quarantined"
     )
+    if result.discarded:
+        msg += f", {result.discarded} discarded (filtered)"
+    typer.echo(msg)
 
 
 @app.command()

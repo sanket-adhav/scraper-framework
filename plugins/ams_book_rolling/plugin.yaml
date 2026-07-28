@@ -1,0 +1,23 @@
+name: ams_book_rolling
+version: 0.1.0
+description: >
+  Scrapes an insurance Agency Management System (Quickfire/Surefire) for the data
+  behind a Book of Business sale-evaluation report: policies, carriers, clients,
+  commissions, claims, renewals and receivables.
+tier: open
+source_approval: "docs/source_approval.md#PENDING-ams_book_rolling"  # internal demo target
+
+# Credentials are read from the environment by the fetcher, never stored here:
+#   AMS_BASE_URL, AMS_EMAIL, AMS_PASSWORD
+
+config_files:
+  - config/policies.yaml
+  - config/carriers.yaml
+  - config/clients.yaml
+  - config/commissions.yaml
+  - config/claims.yaml
+  - config/renewal_pipeline.yaml
+  - config/billing_aging.yaml
+  - config/submissions.yaml
+  - config/client_quality.yaml
+  - config/carrier_appointments.yaml

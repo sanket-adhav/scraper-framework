@@ -33,6 +33,7 @@ class JobResult:
     completed: int = 0
     aborted: int = 0
     quarantined: int = 0
+    discarded: int = 0 
     results: tuple[PipelineResult, ...] = field(default_factory=tuple)
 
 
@@ -86,6 +87,7 @@ class ScraperEngine:
             completed=counts[PipelineStatus.COMPLETED],
             aborted=counts[PipelineStatus.ABORTED],
             quarantined=counts[PipelineStatus.QUARANTINED],
+            discarded=counts[PipelineStatus.DISCARDED],
             results=tuple(results),
         )
         self._bus.publish(

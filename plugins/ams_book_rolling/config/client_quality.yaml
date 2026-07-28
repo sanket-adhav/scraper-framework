@@ -1,0 +1,92 @@
+# ==============================================================================
+# AMS — Client quality (§3 retention & longevity, §4 client quality, §7 data quality)
+# Source: /Reports/ClientQuality — tenure buckets, contact-data completeness,
+# and a per-client roster carrying DateOpened, policy count and premium share.
+# ==============================================================================
+
+pipeline: [fetch, parse, extract, validate, transform, persist]
+
+urls:
+  - "http://localhost:5577/Reports/ClientQuality"
+
+fetcher: authenticated_playwright
+fetcher_options:
+  login_url: "http://localhost:5577/Account/Login"
+  username: "secret://env/AMS_EMAIL"
+  password: "secret://env/AMS_PASSWORD"
+  username_selector: 'input[name="Input.Email"]'
+  password_selector: 'input[name="Input.Password"]'
+  submit_selector: 'button.submitbtn[type="submit"]'
+  logged_out_selector: 'input[name="Input.Password"]'
+  wait_selector: "table.billing-table tbody tr"
+  wait_after_s: 2.5
+  timeout_s: 60
+
+parser: html
+
+extractor: table
+extractor_options:
+  collections:
+    data_quality:
+      rows: '//table[.//th[normalize-space()="Metric"]]//tbody/tr'
+      columns: [metric, complete, coverage]
+    by_tenure:
+      # Anchored to the FIRST header cell: the per-client roster below also has a
+      # "Tenure" column, and an unanchored match would splice both tables together.
+      rows: '//table[.//thead/tr/th[1][normalize-space()="Tenure"]]//tbody/tr'
+      columns: [tenure, clients, pct_of_book, premium]
+    clients:
+      rows: '//table[.//th[normalize-space()="Opened"]]//tbody/tr'
+      columns:
+        - client
+        - opened
+        - tenure
+        - policies
+        - premium
+        - pct_of_book
+        - has_email
+        - has_phone
+        - address_status
+
+extract:
+  schema_version: "1"
+  spec:
+    page_title:
+      kind: css
+      query: "title"
+      required: false
+      cleanup: [collapse_whitespace, strip]
+
+middleware:
+  - retry
+middleware_options:
+  retry:
+    max_attempts: 3
+
+engine:
+  max_requests: 2
+
+plugin:
+  name: ams_book_rolling
+  version: 0.1.0
+
+validate:
+  validators:
+    - name: required_field
+      options: {fields: [collections]}
+
+error_policy:
+  stages:
+    extract:
+      ExtractionError: skip
+    validate:
+      ValidationError: skip
+
+persist:
+  repositories:
+    - name: json
+      options:
+        path: "output/ams/client_quality.json"
+        mode: upsert
+        key_fields: [source_url]
+        indent: 2
