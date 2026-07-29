@@ -1,5 +1,5 @@
 """In-memory job queue — the hermetic default for single-process runs and tests.
-
+task queue when running multiple parallel scrapers workers on a server.
 Implements the same QueueProvider contract as PostgresQueue, so the worker loop
 and engine behave identically whether jobs live in a deque or in Postgres.
 """

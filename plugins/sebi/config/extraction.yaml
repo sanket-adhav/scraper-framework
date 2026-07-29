@@ -1,0 +1,41 @@
+# sebi — start by pointing urls/fixtures at your source and filling in the spec.
+
+pipeline: [fetch, parse, extract, validate, transform, persist]
+
+urls:
+  - "file://sample.html"
+
+fetcher: local_file
+fetcher_options:
+  root: "plugins/sebi/fixtures"
+
+parser: html
+
+plugin:
+  name: sebi
+  version: 0.1.0
+
+extract:
+  schema_version: "1"
+  spec:
+    title:
+      kind: css
+      query: "h1#title"
+      cleanup: [collapse_whitespace]
+
+validate:
+  validators:
+    - name: required_field
+      options: {fields: [title]}
+
+persist:
+  repositories:
+    - name: csv
+      options:
+        path: "output/sebi.csv"
+
+# --- config-spec test wiring (auto-discovered by tests/config_specs) ---
+fixture: sample.html
+sample_url: "file://sample.html"
+expect:
+  title: "Sample product"

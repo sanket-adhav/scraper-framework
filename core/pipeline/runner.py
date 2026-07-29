@@ -39,6 +39,7 @@ class PipelineStatus(StrEnum):
     COMPLETED = "completed"
     ABORTED = "aborted"
     QUARANTINED = "quarantined"
+    DISCARDED = "discarded"  # silently filtered out — no quarantine file written
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +101,12 @@ class PipelineRunner:
                 if action is ErrorAction.SKIP:
                     self._emit(STAGE_FAILED, ctx, stage, action="skip", error=str(error))
                     return None
+                if action is ErrorAction.DISCARD:
+                    # Silently drop this URL — no quarantine file, no noise in the summary
+                    self._emit(STAGE_FAILED, ctx, stage, action="discard", error=str(error))
+                    return PipelineResult(
+                        PipelineStatus.DISCARDED, ctx, failed_stage=stage.name, error=error
+                    )
                 if action is ErrorAction.QUARANTINE:
                     self._put_quarantine(stage, ctx, error)
                     self._emit(RECORD_QUARANTINED, ctx, stage, error=str(error))

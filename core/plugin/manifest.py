@@ -8,13 +8,32 @@ Python components it contributes.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic import ValidationError as PydanticValidationError
 
 from core.errors.exceptions import PluginError
+
+ParamType = Literal["string", "integer", "number", "boolean", "date"]
+
+
+class ParamSpec(BaseModel):
+    """One runtime parameter a plugin will accept from the caller (plan2.md §runtime).
+
+    Declares the parameter's type, whether it is mandatory, and an optional
+    default. This is the contract the JobResolver validates caller input against;
+    the engine never sees it. Business meaning (what `title` or `category` means
+    for this site) stays in the plugin — core only knows the shape."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: ParamType = "string"
+    required: bool = False
+    default: Any | None = None
+    description: str = ""
+    format: str | None = None
 
 
 class PluginManifest(BaseModel):
@@ -30,6 +49,9 @@ class PluginManifest(BaseModel):
     config_files: list[str] = Field(default_factory=lambda: ["config/extraction.yaml"])
     components: dict[str, dict[str, str]] = Field(default_factory=dict)
     """Contributed Python components: kind → {name: "file.py:ClassName"}."""
+    params: dict[str, ParamSpec] = Field(default_factory=dict)
+    """Runtime parameters the plugin accepts (optional). Empty ⇒ the plugin takes
+    no parameters and behaves exactly as before this feature existed."""
 
 
 def load_manifest(path: Path) -> PluginManifest:

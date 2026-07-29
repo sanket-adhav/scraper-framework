@@ -29,6 +29,13 @@ ConfigLayer = Mapping[str, Any] | str | Path
 
 _SECRET_KEY_HINTS = ("password", "passwd", "secret", "token", "api_key", "apikey", "credential")
 
+# Keys whose *name* contains a credential hint but whose value is structurally
+# never a secret. A login-capable fetcher has to name the field it types into
+# (`password_selector: input[name=...]`); that is a CSS selector, not a
+# credential. The suffix must match exactly so `password_selector` is exempt
+# while `password`, `password_value`, or `selector_password` are not.
+_SECRET_KEY_EXEMPT_SUFFIXES = ("_selector",)
+
 
 @dataclass(frozen=True, slots=True)
 class ResolvedConfig:
@@ -132,11 +139,13 @@ def _reject_plaintext_secrets(value: Any, path: str = "") -> None:
     if isinstance(value, Mapping):
         for key, sub in value.items():
             key_path = f"{path}.{key}" if path else str(key)
+            lowered = str(key).lower()
             if (
                 isinstance(sub, str)
                 and sub
                 and not sub.startswith(SECRET_REF_PREFIX)
-                and any(hint in str(key).lower() for hint in _SECRET_KEY_HINTS)
+                and any(hint in lowered for hint in _SECRET_KEY_HINTS)
+                and not lowered.endswith(_SECRET_KEY_EXEMPT_SUFFIXES)
             ):
                 raise ConfigError(
                     f"config key {key_path!r} looks like a credential but is plaintext; "

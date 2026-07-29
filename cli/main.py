@@ -2,7 +2,7 @@
 
 Everything a scrape needs comes from YAML; the CLI only assembles and runs it.
 """
-
+# handles terminal commands for user interface
 from __future__ import annotations
 
 import asyncio
@@ -27,6 +27,7 @@ from core.pipeline.builder import build_pipeline
 from core.pipeline.runner import PipelineRunner
 from core.plugin.manager import PluginManager
 from core.registry.registry import Registry
+from core.runtime.resolver import JobResolver, ResolvedRuntimeConfig
 
 app = typer.Typer(help="Config-driven scraping framework.", no_args_is_help=True)
 
@@ -61,6 +62,73 @@ def _load_validated(job_file: Path | None, config_dir: Path) -> tuple[ResolvedCo
         layers, presets_dir=presets_dir, registry=registry, secrets=provider
     )
     return config, registry
+
+
+def _parse_params(
+    param: list[str] | None,
+    params_json: str | None = None,
+    params_file: Path | None = None,
+) -> dict[str, object]:
+    """Turns a params file, a `--params-json` string, and `--param key=value` pairs
+    into one dict. Precedence low→high: file, then JSON, then key=value pairs, so a
+    quick `-p` on the command line can override a value from a saved params file."""
+    parsed: dict[str, object] = {}
+    if params_file is not None:
+        parsed.update(_load_params_file(params_file))
+    if params_json:
+        try:
+            loaded = json.loads(params_json)
+        except json.JSONDecodeError as err:
+            raise ConfigError(f"--params-json is not valid JSON: {err}") from err
+        if not isinstance(loaded, dict):
+            raise ConfigError("--params-json must be a JSON object")
+        parsed.update(loaded)
+    for item in param or []:
+        if "=" not in item:
+            raise ConfigError(f"--param must be key=value, got {item!r}")
+        key, value = item.split("=", 1)
+        parsed[key.strip()] = value
+    return parsed
+
+
+def _load_params_file(path: Path) -> dict[str, object]:
+    """Reads a YAML or JSON file holding a flat mapping of param name → value."""
+    if not path.exists():
+        raise ConfigError(f"params file not found: {path}")
+    import yaml
+
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(loaded, dict):
+        raise ConfigError(f"params file {path} must contain a mapping of param: value")
+    return dict(loaded)
+
+
+def _resolve_plugin(
+    plugin: str,
+    params: dict[str, object],
+    plugins_dir: Path,
+    config_dir: Path,
+) -> tuple[ResolvedRuntimeConfig, ResolvedConfig, Registry]:
+    """Resolves a plugin + runtime params into a validated, engine-ready config.
+
+    This is the dynamic-parameter execution flow: load plugin → validate params
+    → render placeholders (JobResolver) → layer under the shipped defaults →
+    run every load-time check. The engine only ever sees the resolved result."""
+    dotenv.load_dotenv()
+    registry = default_registry()
+    resolver = JobResolver.from_directory(plugins_dir, registry)
+    resolved = resolver.resolve(plugin, params)
+
+    presets = config_dir / "presets"
+    presets_dir = presets if presets.exists() else None
+    provider = EnvSecretsProvider()
+    layers: list[ConfigLayer] = _layers(None, config_dir) + [dict(resolved.config)]
+
+    register_default_stages(registry, load_config(layers, presets_dir=presets_dir).data)
+    config = load_config(
+        layers, presets_dir=presets_dir, registry=registry, secrets=provider
+    )
+    return resolved, config, registry
 
 
 def _build_engine(
@@ -106,10 +174,13 @@ def _job_from_config(config: ResolvedConfig) -> ScrapeJob:
 
 def _echo_summary(result: JobResult) -> None:
     """Prints the one-line job outcome."""
-    typer.echo(
+    msg = (
         f"job {result.job_id}: {result.completed} completed, "
         f"{result.aborted} aborted, {result.quarantined} quarantined"
     )
+    if result.discarded:
+        msg += f", {result.discarded} discarded (filtered)"
+    typer.echo(msg)
 
 
 @app.command()
@@ -128,6 +199,69 @@ def run(
     _echo_summary(result)
     if result.aborted:
         raise typer.Exit(code=1)
+
+
+@app.command("run-plugin")
+def run_plugin(
+    plugin: str = typer.Argument(..., help="Plugin name, e.g. sebi_circulars"),
+    param: list[str] = typer.Option(
+        None, "--param", "-p", help="Runtime param as key=value (repeatable)"
+    ),
+    params_file: Path = typer.Option(
+        None, "--params-file", "-f", help="YAML/JSON file of param: value pairs"
+    ),
+    params_json: str = typer.Option(
+        None, "--params-json", help="Runtime params as a JSON object"
+    ),
+    plugins_dir: Path = typer.Option(Path("plugins"), help="Where plugin folders live"),
+    config_dir: Path = typer.Option(Path("config"), help="Directory with default YAMLs"),
+) -> None:
+    """Runs a plugin with runtime parameters — no YAML edit needed.
+
+    Pass params from a file, or inline, or both (inline overrides the file):
+
+        scraper run-plugin sebi_circulars -f jobs/sif.yaml
+        scraper run-plugin sebi_circulars -p title="Mutual Fund Regulations"
+        scraper run-plugin sebi_circulars            # scrape everything
+    """
+    try:
+        params = _parse_params(param, params_json, params_file)
+        resolved, config, registry = _resolve_plugin(plugin, params, plugins_dir, config_dir)
+        typer.echo(f"resolved {plugin} with params {dict(resolved.params) or '{}'}")
+        engine = _build_engine(config, registry, list(config.data["pipeline"]))
+        result = asyncio.run(engine.run(_job_from_config(config)))
+    except ScraperError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(code=1) from err
+    _echo_summary(result)
+    if result.aborted:
+        raise typer.Exit(code=1)
+
+
+@app.command("resolve")
+def resolve(
+    plugin: str = typer.Argument(..., help="Plugin name, e.g. sebi_circulars"),
+    param: list[str] = typer.Option(
+        None, "--param", "-p", help="Runtime param as key=value (repeatable)"
+    ),
+    params_file: Path = typer.Option(
+        None, "--params-file", "-f", help="YAML/JSON file of param: value pairs"
+    ),
+    params_json: str = typer.Option(
+        None, "--params-json", help="Runtime params as a JSON object"
+    ),
+    plugins_dir: Path = typer.Option(Path("plugins"), help="Where plugin folders live"),
+    config_dir: Path = typer.Option(Path("config"), help="Directory with default YAMLs"),
+) -> None:
+    """Resolves a plugin + params to its final config and prints it — no scrape.
+    Use it to preview exactly what the engine would run for a given parameter set."""
+    try:
+        params = _parse_params(param, params_json, params_file)
+        _resolved, config, _registry = _resolve_plugin(plugin, params, plugins_dir, config_dir)
+    except ScraperError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(code=1) from err
+    typer.echo(json.dumps(dict(config.data), indent=2, ensure_ascii=False, default=str))
 
 
 @app.command()

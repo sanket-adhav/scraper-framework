@@ -56,12 +56,44 @@ def to_int(value: str) -> int:
         raise ExtractionError(f"cannot convert {value!r} to int") from err
 
 
+def strip_trailing_dot(value: str) -> str:
+    """Removes trailing dots or punctuation: '179.' → '179'."""
+    return value.rstrip(". ,")
+
+
+def format_inr_price(value: str) -> str:
+    """Removes trailing dot and adds INR symbol: '179.' → '₹179'."""
+    clean = value.rstrip(". ,").strip()
+    if not clean:
+        return ""
+    if not clean.startswith("₹"):
+        return f"₹{clean}"
+    return clean
+
+
+def short_title(value: str) -> str:
+    """Shortens cluttered product titles into clean, concise product names:
+    'OnePlus N6 | 6GB+128GB | Midnight Green...' → 'OnePlus N6 (6GB+128GB)'
+    'Portronics Conch Theta C in Ear..., Powerful Audio...' → 'Portronics Conch Theta C in Ear Type C Wired Earphones'."""
+    if "|" in value:
+        parts = [p.strip() for p in value.split("|") if p.strip()]
+        if len(parts) >= 2:
+            return f"{parts[0]} ({parts[1]})"
+        return parts[0]
+    if "," in value:
+        return value.split(",")[0].strip()
+    return value[:60].strip()
+
+
 CLEANUPS: dict[str, Callable[[Any], Any]] = {
     "strip": strip,
     "lower": lower,
     "upper": upper,
     "collapse_whitespace": collapse_whitespace,
     "strip_currency": strip_currency,
+    "strip_trailing_dot": strip_trailing_dot,
+    "format_inr_price": format_inr_price,
+    "short_title": short_title,
     "to_float": to_float,
     "to_int": to_int,
 }

@@ -1,5 +1,5 @@
 """The extract pipeline stage: runs the extractor over ctx.document and stamps provenance."""
-
+# extract records from the document
 from __future__ import annotations
 
 from dataclasses import replace

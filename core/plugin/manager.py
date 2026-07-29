@@ -91,12 +91,16 @@ class PluginManager:
                 seen_names.add(plugin.manifest.name)
                 self.loaded.append(plugin)
 
-    def config_for(self, plugin_name: str) -> Mapping[str, Any]:
-        """Returns the merged config of one loaded plugin, by manifest name."""
+    def get(self, plugin_name: str) -> LoadedPlugin:
+        """Returns one loaded plugin (manifest + merged config), by manifest name."""
         for plugin in self.loaded:
             if plugin.manifest.name == plugin_name:
-                return plugin.config
+                return plugin
         raise PluginError(f"no loaded plugin named {plugin_name!r}")
+
+    def config_for(self, plugin_name: str) -> Mapping[str, Any]:
+        """Returns the merged config of one loaded plugin, by manifest name."""
+        return self.get(plugin_name).config
 
     def _load_one(self, candidate: PluginCandidate, seen_names: set[str]) -> LoadedPlugin:
         """Manifest → collision check → components → config, for one candidate."""

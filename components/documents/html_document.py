@@ -1,5 +1,5 @@
 """HTML page as a Document: query it with CSS, XPath, regex, or plain text (plan2.md §5)."""
-
+# in this folder stores the all the documents required for the scraper
 from __future__ import annotations
 
 from collections.abc import Mapping

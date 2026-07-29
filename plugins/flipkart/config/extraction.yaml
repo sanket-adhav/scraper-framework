@@ -1,0 +1,51 @@
+# flipkart — start by pointing urls/fixtures at your source and filling in the spec.
+
+# flipkart — Scrapes iPhone 17 specifications to CSV
+pipeline: [fetch, parse, discover, extract, validate, persist]
+
+urls:
+  - "https://www.flipkart.com/search?q=i+phone+17+pro&otracker=search&otracker1=search&marketplace=FLIPKART&as-show=on&as=off&as-pos=1&as-type=HISTORY"
+
+fetcher: http
+fetcher_options:
+  timeout_s: 30
+  default_headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+middleware: [retry, rate_limit]
+
+plugin:
+  name: flipkart
+  version: 0.1.0
+
+discover:
+  next_url:
+    kind: xpath
+    query: "//a[contains(@href, 'apple-iphone')]/@href"
+
+extract:
+  schema_version: "1"
+  spec:
+    title:
+      kind: regex
+      query: "\"name\":\"([^\"]+iPhone[^\"]+)\""
+      cleanup: [strip]
+    price:
+      kind: regex
+      query: "\"price\":(\\d+)"
+      cleanup: [strip]
+    specifications:
+      kind: regex
+      query: "\"description\":\"([^\"]+)\""
+      cleanup: [strip]
+
+validate:
+  validators:
+    - name: required_field
+      options: {fields: [title]}
+
+persist:
+  repositories:
+    - name: csv
+      options:
+        path: "output/flipkart_iphone17_specs.csv"

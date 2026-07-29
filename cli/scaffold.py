@@ -1,6 +1,6 @@
 """The new-plugin scaffold generator (plan2.md §14's mitigation for
 "overhead on tiny scrapes"): a working, validate-passing skeleton in seconds."""
-
+# This scfaffold is used to create a new plugin
 from __future__ import annotations
 
 from pathlib import Path

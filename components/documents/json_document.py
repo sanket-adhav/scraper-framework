@@ -1,5 +1,5 @@
 """JSON data as a Document: query it with JSONPath, regex, or plain text (plan2.md §5)."""
-
+# stores json data
 from __future__ import annotations
 
 import json

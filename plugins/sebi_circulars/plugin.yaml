@@ -5,3 +5,32 @@ tier: open
 source_approval: "docs/source_approval.md#SRC-0006"
 config_files:
   - config/extraction.yaml
+
+params:
+  title:
+    type: string
+    required: false
+    description: "Keyword pre-filtered on SEBI's server (&search=) and matched against the circular title."
+
+  from_date:
+    type: date
+    required: false
+    format: "%d-%m-%Y"
+    description: "Start date (YYYY-MM-DD)."
+
+  to_date:
+    type: date
+    required: false
+    format: "%d-%m-%Y"
+    description: "End date (YYYY-MM-DD)."
+
+  category_id:
+    type: integer
+    required: false
+    default: -1
+    description: "The SEBI Legal category to search. Defaults to -1 (All Categories). Specific Options: 1 (Acts), 2 (Rules), 3 (Regulations), 7 (Circulars)."
+    
+  max_results:
+    type: integer
+    default: 50
+    description: "Safety cap on how many listing rows this run will follow."

@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+#progress updates 
 import typer
 from core.events.types import Event
 
@@ -17,7 +17,11 @@ class ConsoleFeedbackListener:
                 short_url = url.split("?")[0]
                 typer.echo(f"[*] Fetching: {short_url}...")
             elif stage == "discover":
-                typer.echo(f"[*] Discovering circular links from listing page...")
+                if "HomeAction.do" in url or "sebiweb" in url:
+                    typer.echo(f"[*] Discovering circular links from listing page...")
+                else:
+                    # Don't clutter the logs on detail pages
+                    pass
         
         elif event.type == "record.extracted":
             title = payload.get("title")

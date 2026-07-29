@@ -18,6 +18,10 @@ _OPS: Mapping[str, Callable[[Any, Any], bool]] = {
     "!=": operator.ne,
     "in": lambda a, b: a in b,
     "not_in": lambda a, b: a not in b,
+    # 'contains': field value contains the config keyword (case-sensitive)
+    "contains": lambda a, b: str(b).lower() in str(a).lower(),
+    # 'not_contains': field value does NOT contain the config keyword
+    "not_contains": lambda a, b: str(b).lower() not in str(a).lower(),
 }
 
 
