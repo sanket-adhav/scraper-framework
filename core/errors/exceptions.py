@@ -61,6 +61,11 @@ class PluginError(ScraperError):
     """A plugin failed to load or misbehaved; the plugin gets quarantined."""
 
 
+class ParamError(ScraperError):
+    """A runtime parameter is unknown, missing, or the wrong type — raised while
+    resolving a job, before any scrape starts."""
+
+
 class AuthError(ScraperError):
     """Login failed or a session could not be acquired/refreshed."""
 

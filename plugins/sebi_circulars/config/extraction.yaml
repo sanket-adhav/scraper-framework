@@ -1,10 +1,7 @@
 pipeline: [fetch, parse, discover, extract, validate, persist]
 
-# SEBI Circulars-only listing page (Legal → Circulars)
-# 💡 PRO TIP: You can pass a search keyword directly to SEBI's server using &search=
-# This is much faster than scraping 50 items and filtering — it pre-filters instantly!
 urls:
-  - "https://www.sebi.gov.in/sebiweb/home/HomeAction.do?doListing=yes&sid=1&ssid=7&smid=0&search=Specialized+Investment+Funds"
+  - "https://www.sebi.gov.in/sebiweb/home/HomeAction.do?doListing=yes&sid=1&ssid=${category_id}&smid=0&search=${title}&fromDate=${from_date}&toDate=${to_date}"
 
 fetcher: http
 fetcher_options:
@@ -16,7 +13,7 @@ fetcher_options:
 middleware: [retry, rate_limit]
 
 engine:
-  max_requests: 50
+  max_requests: ${max_results}
 
 plugin:
   name: sebi_circulars
@@ -51,18 +48,15 @@ validate:
         rules:
           - field: title
             op: contains
-            value: "Certification Requirements for Distribution of Specialized Investment Funds (SIFs)"
-          # - field: date
-          #   op: contains
-          #   value: "Jul 21, 2026"
+            value: "${title}"
 
 error_policy:
   stages:
     extract:
-      ExtractionError: skip        # no fields found → skip this URL
+      ExtractionError: skip
       UnsupportedSelectorError: skip
     validate:
-      ValidationError: discard    # title doesn't match → silently drop, no quarantine file
+      ValidationError: discard
     persist:
       PersistError: skip
 

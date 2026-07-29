@@ -157,7 +157,8 @@ class FileRepository:
         # Check if URL query contains a file param (e.g. ?file=foo.pdf)
         unwrapped = self._unwrap_file_param(url)
         if unwrapped:
-            return await self._resolve_pdf_url(client, unwrapped)
+            resolved_unwrapped = urljoin(url, unwrapped)
+            return await self._resolve_pdf_url(client, resolved_unwrapped)
 
         if not self._resolve_intermediate:
             return url
