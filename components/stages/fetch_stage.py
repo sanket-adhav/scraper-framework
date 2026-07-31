@@ -1,5 +1,5 @@
 """The fetch pipeline stage: runs the middleware-wrapped fetcher and stores the Response."""
-# fetches the url 
+# fetches the url
 from __future__ import annotations
 
 from collections.abc import Sequence

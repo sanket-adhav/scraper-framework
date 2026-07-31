@@ -1,7 +1,0 @@
-name: beedzp
-version: 0.1.0
-description: "TODO: what this plugin scrapes"
-tier: open
-source_approval: "docs/source_approval.md#PENDING-beedzp"  # add a real SRC entry before go-live
-config_files:
-  - config/extraction.yaml

@@ -12,7 +12,7 @@ from tests.fake_browser import FakeBrowser, fake_browser_factory
 from tests.helpers import FIXTURES_DIR
 
 REPO_ROOT = Path(__file__).parent.parent.parent
-PRESETS = REPO_ROOT / "config" / "presets"
+PRESETS = REPO_ROOT / "core" / "defaults" / "presets"
 
 
 def ctx(url: str) -> Context:

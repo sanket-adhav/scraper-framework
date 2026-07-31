@@ -17,7 +17,7 @@ from tests.fakes import FakeStage
 from tests.helpers import FIXTURES_DIR
 
 REPO_ROOT = Path(__file__).parent.parent.parent
-MIDDLEWARE_YAML = REPO_ROOT / "config" / "middleware.yaml"
+MIDDLEWARE_YAML = REPO_ROOT / "core" / "defaults" / "middleware.yaml"
 
 
 def make_ctx(url: str) -> Context:

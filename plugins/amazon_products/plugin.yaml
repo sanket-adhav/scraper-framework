@@ -1,0 +1,8 @@
+name: amazon_products
+version: 0.1.0
+description: "Amazon Best Sellers products scraper plugin."
+tier: defended
+# TODO: replace with a real approved SRC entry before this plugin goes live.
+source_approval: "docs/source_approval.md#SRC-PENDING-amazon-products"
+config_files:
+  - config/extraction.yaml

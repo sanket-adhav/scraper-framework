@@ -84,7 +84,7 @@ def _coerce_bool(value: Any) -> bool:
 def _coerce_date(value: Any, fmt: str | None = None) -> str:
     """Validates an ISO date (YYYY-MM-DD) and returns it as a normalised string.
     If fmt is provided, it uses strftime to format the output.
-    
+
     Kept as a string, not a date object, so it substitutes cleanly into URLs and
     validator values; the point of the type is to reject malformed input early."""
     if isinstance(value, datetime):
@@ -93,7 +93,7 @@ def _coerce_date(value: Any, fmt: str | None = None) -> str:
         d = value
     else:
         d = date.fromisoformat(str(value).strip())
-        
+
     if fmt:
         return d.strftime(fmt)
     return d.isoformat()

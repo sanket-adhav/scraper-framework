@@ -56,6 +56,8 @@ class PluginManifest(BaseModel):
 
 def load_manifest(path: Path) -> PluginManifest:
     """Reads and validates one plugin.yaml, raising PluginError with clear detail."""
+    if not path.is_file():
+        raise PluginError(_missing_manifest_message(path))
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as err:
@@ -65,4 +67,34 @@ def load_manifest(path: Path) -> PluginManifest:
     try:
         return PluginManifest.model_validate(raw)
     except PydanticValidationError as err:
-        raise PluginError(f"invalid manifest {path}:\n{err}") from err
+        raise PluginError(f"invalid manifest {path}:\n{_format_errors(err)}") from err
+
+
+def _missing_manifest_message(path: Path) -> str:
+    """Explains a missing plugin.yaml, naming a likely misnamed file if present."""
+    folder = path.parent
+    strays = sorted(
+        p.name
+        for p in folder.glob("*.y*ml")
+        if p.name != path.name and p.is_file()
+    )
+    hint = (
+        f" (found {', '.join(strays)} — the manifest must be named {path.name!r})"
+        if strays
+        else ""
+    )
+    return f"no {path.name} in {folder}{hint}"
+
+
+def _format_errors(err: PydanticValidationError) -> str:
+    """Renders pydantic errors one per line, always naming the offending field.
+
+    The default `str(err)` puts the field on its own line above the message,
+    which the CLI's single-line plugin listing then truncates away — leaving
+    'Field required' with no indication of *which* field.
+    """
+    lines = []
+    for e in err.errors():
+        loc = ".".join(str(p) for p in e["loc"]) or "<root>"
+        lines.append(f"  {loc}: {e['msg']}")
+    return "\n".join(lines)

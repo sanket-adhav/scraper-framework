@@ -13,6 +13,13 @@ tier: open
 source_approval: "docs/source_approval.md#PENDING-{name}"  # add a real SRC entry before go-live
 config_files:
   - config/extraction.yaml
+
+params:
+  search_term:
+    type: string
+    required: false
+    default: "example"
+    description: "An example runtime parameter injected into the URL."
 """
 
 CONFIG_TEMPLATE = """\
@@ -21,7 +28,8 @@ CONFIG_TEMPLATE = """\
 pipeline: [fetch, parse, extract, validate, transform, persist]
 
 urls:
-  - "file://sample.html"
+  # The ${{search_term}} variable is automatically populated from runtime params
+  - "file://sample.html?query=${{search_term}}"
 
 fetcher: local_file
 fetcher_options:
@@ -54,7 +62,7 @@ persist:
 
 # --- config-spec test wiring (auto-discovered by tests/config_specs) ---
 fixture: sample.html
-sample_url: "file://sample.html"
+sample_url: "file://sample.html?query=example"
 expect:
   title: "Sample product"
 """

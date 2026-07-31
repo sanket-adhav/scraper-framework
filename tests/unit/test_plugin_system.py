@@ -86,11 +86,36 @@ class TestManifest:
 
 
 class TestDiscovery:
-    def test_scan_finds_only_folders_with_manifest(self, tmp_path):
+    def test_scan_reports_folders_without_a_manifest_instead_of_hiding_them(self, tmp_path):
+        """A folder with no plugin.yaml is still a candidate, so the manager can
+        quarantine it with a reason.
+
+        Silently skipping such folders meant a plugin whose manifest was named
+        `manifest.yaml` was invisible: not loaded, not quarantined, and absent
+        from `list-components` with no warning at all.
+        """
         write_plugin(tmp_path, "alpha")
         (tmp_path / "not_a_plugin").mkdir()
+        (tmp_path / "__pycache__").mkdir()
         found = scan_directory(tmp_path)
-        assert [c.name for c in found] == ["alpha"]
+        assert [c.name for c in found] == ["alpha", "not_a_plugin"]
+
+    def test_folder_without_manifest_is_quarantined_with_a_readable_reason(self, tmp_path):
+        from core.registry.registry import Registry
+
+        write_plugin(tmp_path, "alpha")
+        stray = tmp_path / "misnamed"
+        stray.mkdir()
+        (stray / "manifest.yaml").write_text("name: misnamed\n", encoding="utf-8")
+
+        manager = PluginManager(Registry())
+        manager.load_all(tmp_path)
+
+        assert [p.manifest.name for p in manager.loaded] == ["alpha"]
+        assert [q.name for q in manager.quarantined] == ["misnamed"]
+        reason = manager.quarantined[0].reason
+        assert "plugin.yaml" in reason
+        assert "manifest.yaml" in reason  # names the misnamed file it did find
 
     def test_missing_root_is_empty(self, tmp_path):
         assert scan_directory(tmp_path / "nope") == []

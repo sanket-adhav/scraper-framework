@@ -74,7 +74,8 @@ def format_inr_price(value: str) -> str:
 def short_title(value: str) -> str:
     """Shortens cluttered product titles into clean, concise product names:
     'OnePlus N6 | 6GB+128GB | Midnight Green...' → 'OnePlus N6 (6GB+128GB)'
-    'Portronics Conch Theta C in Ear..., Powerful Audio...' → 'Portronics Conch Theta C in Ear Type C Wired Earphones'."""
+    'Portronics Conch Theta C in Ear..., Powerful Audio...' →
+    'Portronics Conch Theta C in Ear Type C Wired Earphones'."""
     if "|" in value:
         parts = [p.strip() for p in value.split("|") if p.strip()]
         if len(parts) >= 2:

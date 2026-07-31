@@ -17,15 +17,33 @@ class PluginCandidate:
     manifest_path: Path
 
 
+MANIFEST_NAME = "plugin.yaml"
+
+#: Folder names that are never plugins, so a missing manifest is not worth
+#: reporting for them.
+_NOT_PLUGINS = frozenset({"__pycache__", ".git", ".ipynb_checkpoints", ".pytest_cache"})
+
+
 def scan_directory(root: Path) -> list[PluginCandidate]:
-    """Finds every subfolder of `root` that contains a plugin.yaml."""
+    """Returns every subfolder of `root` that could be a plugin.
+
+    A subfolder *without* a plugin.yaml is still returned, with `manifest_path`
+    pointing at where the file should be; the PluginManager then quarantines it
+    with a readable reason. Skipping such folders silently — the old behaviour —
+    meant a plugin whose manifest was named `manifest.yaml` did not exist as far
+    as the framework was concerned: not loaded, not quarantined, and absent from
+    `list-components` with no warning. Being invisible is precisely the outcome
+    the quarantine design exists to prevent.
+    """
     if not root.is_dir():
         return []
     candidates = []
     for child in sorted(root.iterdir()):
-        manifest = child / "plugin.yaml"
-        if child.is_dir() and manifest.is_file():
-            candidates.append(PluginCandidate(name=child.name, path=child, manifest_path=manifest))
+        if not child.is_dir() or child.name in _NOT_PLUGINS:
+            continue
+        candidates.append(
+            PluginCandidate(name=child.name, path=child, manifest_path=child / MANIFEST_NAME)
+        )
     return candidates
 
 

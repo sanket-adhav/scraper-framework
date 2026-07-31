@@ -11,7 +11,7 @@ from cli.main import app
 from tests.helpers import FIXTURES_DIR
 
 runner = CliRunner()
-REPO_CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
+REPO_CONFIG_DIR = Path(__file__).parent.parent.parent / "core" / "defaults"
 
 
 def write_job(tmp_path: Path, csv_path: Path, **overrides) -> Path:
@@ -106,13 +106,26 @@ class TestValidate:
         assert result.exit_code == 1
         assert "no_such_validator" in result.output
 
-    def test_missing_required_config_exits_nonzero(self, tmp_path):
-        """DoD: a config with no pipeline can't pass."""
+    def test_empty_pipeline_exits_nonzero(self, tmp_path):
+        """DoD: a config that explicitly empties the pipeline can't pass.
+
+        A job that simply *omits* `pipeline` is fine — it inherits the stage list
+        from the packaged defaults, which is the whole point of layering. Only an
+        explicitly empty list means "run nothing", which is an authoring error.
+        """
         path = tmp_path / "job.yaml"
-        path.write_text(yaml.safe_dump({"urls": ["file://x.html"]}))
+        path.write_text(yaml.safe_dump({"urls": ["file://x.html"], "pipeline": []}))
         result = runner.invoke(app, ["validate", str(path), "--config-dir", str(tmp_path / "n")])
         assert result.exit_code == 1
         assert "pipeline" in result.output
+
+    def test_job_without_pipeline_inherits_packaged_default(self, tmp_path):
+        """The packaged defaults apply even when no project config/ dir exists —
+        this is what makes a pip-installed user behave like a repo developer."""
+        path = tmp_path / "job.yaml"
+        path.write_text(yaml.safe_dump({"urls": ["file://x.html"], "parser": "html"}))
+        result = runner.invoke(app, ["validate", str(path), "--config-dir", str(tmp_path / "n")])
+        assert result.exit_code == 0, result.output
 
 
 class TestDryRun:

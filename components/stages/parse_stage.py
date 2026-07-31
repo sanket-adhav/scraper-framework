@@ -1,5 +1,5 @@
 """The parse pipeline stage: turns ctx.response into ctx.document via the configured parser."""
-# parses the document 
+# parses the document
 from __future__ import annotations
 
 from core.contracts.parser import Parser

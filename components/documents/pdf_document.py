@@ -1,5 +1,5 @@
 """PDF content as a Document: query its extracted text with regex or read it whole (plan2.md §5).
-# stores pdf data 
+# stores pdf data
 Positional block data is kept per page so layout-aware selectors can be added
 later without re-parsing.
 """

@@ -83,7 +83,14 @@ def _plugin_dir(plugin: str) -> Path:
 
 def _config_files(plugin: str) -> list[Path]:
     """The config files a plugin's manifest lists, in order."""
-    manifest = yaml.safe_load((_plugin_dir(plugin) / "plugin.yaml").read_text())
+    manifest_path = _plugin_dir(plugin) / "plugin.yaml"
+    if not manifest_path.is_file():
+        # Surface a readable error across the MCP boundary rather than letting a
+        # bare FileNotFoundError (carrying an absolute server-side path) escape.
+        raise ValueError(f"plugin {plugin!r} has no plugin.yaml — it is not a loadable plugin")
+    manifest = yaml.safe_load(manifest_path.read_text()) or {}
+    if not isinstance(manifest, dict):
+        raise ValueError(f"plugin {plugin!r} has a malformed plugin.yaml (expected a mapping)")
     return [_plugin_dir(plugin) / cf for cf in manifest.get("config_files", [])]
 
 

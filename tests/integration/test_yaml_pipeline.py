@@ -104,7 +104,8 @@ class TestYamlPipeline:
         )
 
     def test_shipped_default_config_is_valid(self):
-        """The repo's config/pipeline.yaml loads and its stage names all resolve."""
-        config = load_config([REPO_ROOT / "config" / "pipeline.yaml"], registry=make_registry([]))
+        """The packaged core/defaults/pipeline.yaml loads and its stage names all resolve."""
+        default_pipeline = REPO_ROOT / "core" / "defaults" / "pipeline.yaml"
+        config = load_config([default_pipeline], registry=make_registry([]))
         assert config.data["pipeline"][0] == "fetch"
         assert config.fingerprint

@@ -1,0 +1,8 @@
+name: mas_circulars
+version: 0.1.0
+description: "Monetary Authority of Singapore (MAS) Circulars scraper plugin."
+tier: open
+# TODO: replace with a real approved SRC entry before this plugin goes live.
+source_approval: "docs/source_approval.md#SRC-PENDING-mas-circulars"
+config_files:
+  - config/extraction.yaml

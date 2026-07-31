@@ -10,13 +10,16 @@ dist/
 .coverage
 .env
 
-# scrape outputs and review piles
-output/
-quarantine/
+# Scrape outputs and the review pile.
+#
+# These patterns MUST stay anchored with a leading slash. An unanchored
+# `quarantine/` matches a directory of that name at ANY depth, which silently
+# excluded `components/quarantine/` from every built wheel — the package
+# installed but every CLI command died on ImportError. Anchor new directory
+# ignores the same way unless you really mean "at any depth".
+/output/
+/quarantine/
 
-# local-only files (kept out of the repo by request)
-plans/
-plan2.md
-uv.lock
-.pre-commit-config.yaml
-.gitkeep
+# Local-only files (kept out of the repo by request).
+/plans/
+/plan2.md

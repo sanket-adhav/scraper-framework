@@ -1,0 +1,27 @@
+# Mirrors CI: ruff, mypy, import-linter on commit; pytest on push.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy (strict on core)
+        entry: uv run mypy
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: import-linter
+        name: architecture boundary (import-linter)
+        entry: uv run lint-imports --config importlinter.ini
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

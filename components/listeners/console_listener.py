@@ -1,6 +1,8 @@
 from __future__ import annotations
-#progress updates 
+
+#progress updates
 import typer
+
 from core.events.types import Event
 
 
@@ -18,16 +20,16 @@ class ConsoleFeedbackListener:
                 typer.echo(f"[*] Fetching: {short_url}...")
             elif stage == "discover":
                 if "HomeAction.do" in url or "sebiweb" in url:
-                    typer.echo(f"[*] Discovering circular links from listing page...")
+                    typer.echo("[*] Discovering circular links from listing page...")
                 else:
                     # Don't clutter the logs on detail pages
                     pass
-        
+
         elif event.type == "record.extracted":
             title = payload.get("title")
             if title:
                 typer.echo(f"[+] Extracted: {title}")
-                
+
         elif event.type == "record.saved":
             filepath = payload.get("filepath")
             if filepath:

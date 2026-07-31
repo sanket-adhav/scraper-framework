@@ -33,8 +33,25 @@ class JobResult:
     completed: int = 0
     aborted: int = 0
     quarantined: int = 0
-    discarded: int = 0 
+    discarded: int = 0
     results: tuple[PipelineResult, ...] = field(default_factory=tuple)
+
+    @property
+    def ok(self) -> bool:
+        """True when nothing aborted and nothing needed review.
+
+        Prefer this over checking `aborted` alone: a job where every record
+        failed extraction aborts nothing — the records are quarantined — so
+        `aborted == 0` on its own is not a success signal.
+        """
+        return self.aborted == 0 and self.quarantined == 0
+
+    def __str__(self) -> str:
+        """One-line summary that always mentions quarantined and discarded."""
+        return (
+            f"job {self.job_id}: {self.completed} completed, {self.aborted} aborted, "
+            f"{self.quarantined} quarantined, {self.discarded} discarded"
+        )
 
 
 class ScraperEngine:
