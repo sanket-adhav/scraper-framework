@@ -45,10 +45,13 @@ class ResolvedConfig:
     fingerprint: str
 
 
+PresetDirs = str | Path | Sequence[str | Path] | None
+
+
 def load_config(
     layers: Sequence[ConfigLayer],
     *,
-    presets_dir: str | Path | None = None,
+    presets_dir: PresetDirs = None,
     registry: Registry | None = None,
     secrets: Any = None,
 ) -> ResolvedConfig:
@@ -101,17 +104,37 @@ def _read_layer(layer: ConfigLayer) -> dict[str, Any]:
     return loaded
 
 
-def _expand_preset(data: dict[str, Any], presets_dir: str | Path | None) -> dict[str, Any]:
+def _preset_search_path(presets_dir: PresetDirs) -> list[Path]:
+    """Normalises the presets argument into an ordered search path.
+
+    Accepting a sequence lets a project's own presets directory shadow the ones
+    shipped inside the package, without either side knowing about the other.
+    """
+    if presets_dir is None:
+        return []
+    if isinstance(presets_dir, str | Path):
+        return [Path(presets_dir)]
+    return [Path(p) for p in presets_dir]
+
+
+def _expand_preset(data: dict[str, Any], presets_dir: PresetDirs) -> dict[str, Any]:
     """If the layer names a preset, loads it and merges the layer on top of it."""
     preset_name = data.pop("preset", None)
     if preset_name is None:
         return data
-    if presets_dir is None:
+    search = _preset_search_path(presets_dir)
+    if not search:
         raise ConfigError(f"config references preset {preset_name!r} but no presets dir is set")
-    preset_path = Path(presets_dir) / f"{preset_name}.yaml"
-    if not preset_path.exists():
-        raise ConfigError(f"preset {preset_name!r} not found at {preset_path}")
-    return _deep_merge(_read_layer(preset_path), data)
+    for directory in search:
+        candidate = directory / f"{preset_name}.yaml"
+        if candidate.exists():
+            return _deep_merge(_read_layer(candidate), data)
+    looked_in = ", ".join(str(d) for d in search)
+    available = sorted({p.stem for d in search if d.is_dir() for p in d.glob("*.yaml")})
+    raise ConfigError(
+        f"preset {preset_name!r} not found (looked in: {looked_in}); "
+        f"available presets: {available or 'none'}"
+    )
 
 
 def _deep_merge(base: dict[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:

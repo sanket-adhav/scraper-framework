@@ -21,7 +21,7 @@ class ErrorAction(StrEnum):
     SKIP = "skip"
     QUARANTINE = "quarantine"
     ABORT = "abort"
-    DISCARD = "discard" 
+    DISCARD = "discard"
 
 
 @runtime_checkable

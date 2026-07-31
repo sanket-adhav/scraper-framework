@@ -1,9 +1,0 @@
-name: imdb_movies
-version: 0.1.0
-description: "IMDb Top Movies scraper plugin."
-author: Scraper Framework Team
-entrypoint: config/extraction.yaml
-capabilities:
-  - fetcher:playwright
-  - parser:auto
-  - repository:json

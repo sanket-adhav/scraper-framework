@@ -14,10 +14,10 @@ from core.models import ScrapeRequest
 from core.models.job import ScrapeJob
 from core.scheduler.incremental_state import Checkpoint
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = os.environ.get("SCRAPER_TEST_DATABASE_URL")
 
 pytestmark = pytest.mark.skipif(
-    not DATABASE_URL, reason="DATABASE_URL not set (real Postgres only)"
+    not DATABASE_URL, reason="set SCRAPER_TEST_DATABASE_URL to a throwaway database to run these"
 )
 
 

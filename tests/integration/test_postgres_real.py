@@ -10,10 +10,10 @@ import pytest
 from components.repositories.postgres_repository import PostgresRepository
 from tests.helpers import make_record
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = os.environ.get("SCRAPER_TEST_DATABASE_URL")
 
 pytestmark = pytest.mark.skipif(
-    not DATABASE_URL, reason="DATABASE_URL not set (real Postgres only runs in CI)"
+    not DATABASE_URL, reason="set SCRAPER_TEST_DATABASE_URL to a throwaway database to run these"
 )
 
 

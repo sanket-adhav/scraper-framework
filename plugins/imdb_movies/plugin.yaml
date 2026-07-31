@@ -1,0 +1,8 @@
+name: imdb_movies
+version: 0.1.0
+description: "IMDb Top Movies scraper plugin."
+tier: defended
+# TODO: replace with a real approved SRC entry before this plugin goes live.
+source_approval: "docs/source_approval.md#SRC-PENDING-imdb-movies"
+config_files:
+  - config/extraction.yaml

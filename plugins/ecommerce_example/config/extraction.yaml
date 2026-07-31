@@ -1,0 +1,100 @@
+# ecommerce_example — the HTML-shaped worked example.
+#
+# Everything here is YAML. There is no Python in this plugin. Read it top to
+# bottom as a tour of what a plugin can express:
+#   fetch      → read a stored fixture from disk (no network, safe to run)
+#   parse      → build an HtmlDocument
+#   discover   → follow the "next product" link, capped by ${max_pages}
+#   extract    → CSS and regex selectors, one optional field, cleanup chains
+#   validate   → required fields, a business rule, duplicate detection
+#   transform  → enum mapping + a constant enrichment field
+#   persist    → upsert into CSV, keyed on sku
+
+pipeline: [fetch, parse, discover, extract, validate, transform, persist]
+
+urls:
+  - "file://product_aurora.html"
+
+fetcher: local_file
+fetcher_options:
+  root: "plugins/ecommerce_example/fixtures"
+
+parser: html
+
+plugin:
+  name: ecommerce_example
+  version: 1.0.0
+
+# Follow the "next product" link until a page omits it.
+discover:
+  next_url:
+    kind: xpath
+    query: "//a[@class='next']/@href"
+  url_template: "file://{value}"
+  max_new: 25
+
+extract:
+  schema_version: "1"
+  spec:
+    sku:
+      kind: css
+      query: "span.sku"
+      cleanup: [strip]
+    title:
+      kind: css
+      query: "h1.product-title"
+      cleanup: [collapse_whitespace]
+    price:
+      kind: css
+      query: "span.price"
+      cleanup: [strip_currency, to_float]
+    # Not every product is discounted. `required: false` is what makes a missing
+    # match resolve to empty instead of quarantining the whole record.
+    discount_pct:
+      kind: regex
+      query: "(\\d+)% off"
+      required: false
+    availability:
+      kind: css
+      query: "p.stock"
+      cleanup: [strip]
+
+validate:
+  validators:
+    - name: required_field
+      options: {fields: [sku, title, price]}
+    - name: business_rule
+      options:
+        rules:
+          - {field: price, op: ">", value: 0}
+    - name: duplicate
+      options: {key_fields: [sku]}
+
+transform:
+  transformers:
+    - name: enum_mapper
+      options:
+        mappings:
+          availability:
+            "In stock": in_stock
+            "Currently unavailable": out_of_stock
+    - name: field_enricher
+      options:
+        constants: {source: shopverse_web}
+
+persist:
+  repositories:
+    - name: csv
+      options:
+        path: "output/ecommerce_example.csv"
+        mode: upsert
+        key_fields: [sku]
+
+# --- config-spec test wiring (auto-discovered by tests/config_specs) ---
+fixture: product_aurora.html
+sample_url: "file://product_aurora.html"
+expect:
+  sku: "B0AURX2HDX"
+  title: "Aurora X2 Wireless Headphones"
+  price: 4999.0
+  discount_pct: "23"

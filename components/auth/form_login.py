@@ -4,7 +4,7 @@ The browser flow is injectable (a callable returning cookies), so tests run
 without a real browser; production uses a Playwright page to fill and submit
 the login form.
 """
-# handles login 
+# handles login
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping

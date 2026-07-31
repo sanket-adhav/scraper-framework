@@ -8,7 +8,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import dotenv
 import typer
@@ -18,6 +21,7 @@ from cli.scaffold import scaffold_plugin
 from components.quarantine.file_sink import FileQuarantineSink
 from components.secrets.env_provider import EnvSecretsProvider
 from core.config.loader import ConfigLayer, ResolvedConfig, load_config
+from core.defaults import DEFAULT_LAYER_NAMES, resolve_default_layers, resolve_presets_dir
 from core.engine.scraper_engine import JobResult, ScraperEngine
 from core.errors.exceptions import ConfigError, ScraperError
 from core.errors.policy import policy_from_config
@@ -33,26 +37,56 @@ app = typer.Typer(help="Config-driven scraping framework.", no_args_is_help=True
 
 
 def _layers(job_file: Path | None, config_dir: Path) -> list[ConfigLayer]:
-    """Builds the config layer list: shipped defaults first, the job file last."""
-    layers: list[ConfigLayer] = []
-    for default in ("pipeline.yaml", "middleware.yaml"):
-        path = config_dir / default
-        if path.exists():
-            layers.append(path)
+    """Builds the config layer list, lowest precedence first.
+
+    Order: defaults shipped inside the package → this project's `config_dir`
+    overrides (optional) → the job file. The packaged defaults are always
+    present, so an installed user and a repo developer get the same middleware
+    stack and error policy for the same plugin. A missing packaged default is
+    an error, not a silent skip — see `core.defaults`.
+    """
+    layers: list[ConfigLayer] = list(resolve_default_layers())
+    for name in DEFAULT_LAYER_NAMES:
+        override = config_dir / name
+        if override.exists():
+            layers.append(override)
     if job_file is not None:
         layers.append(job_file)
     return layers
 
 
-def _load_validated(job_file: Path | None, config_dir: Path) -> tuple[ResolvedConfig, Registry]:
+def _presets_path(config_dir: Path) -> list[Path]:
+    """Presets search path: the project's own directory first, then the packaged
+    ones, so a project can shadow a shipped tier preset by name."""
+    search: list[Path] = []
+    local = config_dir / "presets"
+    if local.is_dir():
+        search.append(local)
+    packaged = resolve_presets_dir()
+    if packaged is not None:
+        search.append(packaged)
+    return search
+
+
+def _load_validated(
+    job_file: Path | None,
+    config_dir: Path,
+    *,
+    strict_placeholders: bool = True,
+) -> tuple[ResolvedConfig, Registry]:
     """Loads config in two passes: shape first, then full name/capability checks
-    once the config-wired stages are registered."""
+    once the config-wired stages are registered.
+
+    `strict_placeholders` is False for `validate`, which is expected to run over
+    a parameterised plugin config as authored — placeholders and all.
+    """
     dotenv.load_dotenv()
+    if strict_placeholders and job_file is not None:
+        _reject_unrendered_placeholders(_read_yaml_mapping(job_file))
     layers = _layers(job_file, config_dir)
-    presets = config_dir / "presets"
 
     provider = EnvSecretsProvider()
-    presets_dir = presets if presets.exists() else None
+    presets_dir = _presets_path(config_dir)
     config = load_config(layers, presets_dir=presets_dir, secrets=provider)
 
     registry = default_registry()
@@ -119,8 +153,7 @@ def _resolve_plugin(
     resolver = JobResolver.from_directory(plugins_dir, registry)
     resolved = resolver.resolve(plugin, params)
 
-    presets = config_dir / "presets"
-    presets_dir = presets if presets.exists() else None
+    presets_dir = _presets_path(config_dir)
     provider = EnvSecretsProvider()
     layers: list[ConfigLayer] = _layers(None, config_dir) + [dict(resolved.config)]
 
@@ -137,11 +170,19 @@ def _build_engine(
     stage_names: list[str],
     *,
     discovered_sink: object = None,
+    quarantine_dir: Path | str | None = None,
 ) -> ScraperEngine:
     """Assembles runner + engine for the given stage list, with logging + metrics
-    listeners attached to the event bus. A discovered_sink switches on queue mode."""
+    listeners attached to the event bus. A discovered_sink switches on queue mode.
+
+    The quarantine sink is wired here and not left optional: without it, a record
+    that fails a stage is dropped with no on-disk trace, which reads as success.
+    """
+    _reject_unrendered_placeholders(config.data)
     stages = build_pipeline(stage_names, registry)
-    quarantine_dir = str(config.data.get("quarantine_dir", "quarantine"))
+    if quarantine_dir is None:
+        quarantine_dir = str(config.data.get("quarantine_dir", "quarantine"))
+    quarantine_dir = str(quarantine_dir)
     bus, _ = build_event_bus()
     runner = PipelineRunner(
         stages,
@@ -151,6 +192,49 @@ def _build_engine(
         bus=bus,
     )
     return ScraperEngine(runner, config, bus=bus, discovered_sink=discovered_sink)  # type: ignore[arg-type]
+
+
+_PLACEHOLDER_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _read_yaml_mapping(path: Path) -> dict[str, Any]:
+    """Reads a YAML file as a mapping, returning {} rather than raising here —
+    the real loader reports malformed files with full context."""
+    import yaml
+
+    try:
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _reject_unrendered_placeholders(data: Any, path: str = "") -> None:
+    """Fails before the first fetch if a `${param}` survived into the built config.
+
+    `run` and `dry-run` take a config file and never invoke the JobResolver, so a
+    plugin config written for `run-plugin` reaches the components with its
+    placeholders intact. Previously that surfaced wherever the value happened to
+    be consumed — `int('${max_pages}')` raising a bare ValueError, or worse, a
+    literal '${search_term}' being sent to a live site inside a URL. Naming the
+    problem and the fix here costs one pass over the config.
+    """
+    if isinstance(data, str):
+        names = _PLACEHOLDER_RE.findall(data)
+        if names:
+            raise ConfigError(
+                f"config key {path or '<root>'!r} still contains unrendered "
+                f"placeholder(s) {sorted(set(names))}. This config declares runtime "
+                f"parameters, so it must be run through the resolver:\n"
+                f"    scraper run-plugin <plugin> -p {names[0]}=<value>\n"
+                f"`scraper run` takes a plain job file and does not substitute parameters."
+            )
+    elif isinstance(data, Mapping):
+        for key, value in data.items():
+            _reject_unrendered_placeholders(value, f"{path}.{key}" if path else str(key))
+    elif isinstance(data, list):
+        for i, item in enumerate(data):
+            _reject_unrendered_placeholders(item, f"{path}[{i}]")
 
 
 def _queue_dsn(config: ResolvedConfig) -> str:
@@ -271,8 +355,23 @@ def validate(
 ) -> None:
     """Runs every load-time check (shape, names, capabilities, secrets); exit 1 on failure.
     Designed to run in CI."""
+    raw = _read_yaml_mapping(config_file)
+    placeholders = sorted(set(_PLACEHOLDER_RE.findall(json.dumps(raw, default=str))))
+    if placeholders:
+        # A parameterised config cannot be shape-checked as authored: a typed
+        # field like `engine.max_requests: ${max_results}` is a string until the
+        # resolver substitutes it. Point at the command that does that, instead
+        # of emitting a pydantic int_parsing dump the author cannot act on.
+        typer.echo(
+            f"this config declares runtime parameters {placeholders}, so it cannot be "
+            f"validated as written.\nValidate it through the resolver, which applies "
+            f"the plugin's declared defaults and runs every load-time check:\n"
+            f"    scraper resolve <plugin>",
+            err=True,
+        )
+        raise typer.Exit(code=1)
     try:
-        config, _ = _load_validated(config_file, config_dir)
+        config, _ = _load_validated(config_file, config_dir, strict_placeholders=False)
     except ScraperError as err:
         typer.echo(f"invalid: {err}", err=True)
         raise typer.Exit(code=1) from err
@@ -474,7 +573,8 @@ def new_plugin(
         typer.echo(f"error: {err}", err=True)
         raise typer.Exit(code=1) from err
     typer.echo(f"created {root}")
-    typer.echo(f"next: scraper validate {root / 'config' / 'extraction.yaml'}")
+    typer.echo(f"next: scraper run-plugin {name}")
+    typer.echo(f"then edit: {root / 'config' / 'extraction.yaml'}")
 
 
 if __name__ == "__main__":

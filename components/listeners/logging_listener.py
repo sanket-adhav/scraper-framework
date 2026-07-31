@@ -28,7 +28,7 @@ class LoggingListener:
             or (event.type == "validation.failed" and not event.payload.get("has_record"))
         ):
             is_warning = False
-            
+
         level = logging.WARNING if is_warning else logging.INFO
         self._logger.log(
             level, "event %s", event.type, extra={"event": event.type, **dict(event.payload)}

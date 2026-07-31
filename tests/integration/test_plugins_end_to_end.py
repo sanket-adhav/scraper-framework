@@ -4,11 +4,9 @@ scaffold output validates immediately, and quarantine shows in list-components."
 
 import csv
 import json
-import os
 import shutil
 from pathlib import Path
 
-import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -21,6 +19,7 @@ from core.models import ScrapeRequest
 from core.models.job import ScrapeJob
 from core.pipeline.builder import build_pipeline
 from core.pipeline.runner import PipelineRunner
+from tests.conftest import requires_postgres, test_database_url
 
 runner = CliRunner()
 REPO_ROOT = Path(__file__).parent.parent.parent
@@ -30,7 +29,7 @@ def _cleanup_table(table: str) -> None:
     """Drops a test table from the Postgres database, keeping it clean."""
     import psycopg
 
-    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+    with psycopg.connect(test_database_url() or "") as conn:
         with conn.cursor() as cur:
             cur.execute(f"DROP TABLE IF EXISTS {table}")
         conn.commit()
@@ -124,17 +123,37 @@ class TestPluginBApi:
 
 
 class TestCliOnRealPlugins:
-    @pytest.mark.skipif(
-        not os.environ.get("DATABASE_URL"),
-        reason="ecommerce_example persists to Postgres; needs DATABASE_URL",
-    )
-    def test_scraper_run_plugin_a_writes_to_postgres(self, monkeypatch):
-        """`scraper run` on the plugin's own config (Postgres-backed) runs green,
-        resolving secret://env/DATABASE_URL and writing rows to the DB."""
+    @requires_postgres
+    def test_scraper_run_plugin_a_writes_to_postgres(self, tmp_path, monkeypatch):
+        """`scraper run` runs green against a Postgres-backed persist stage,
+        resolving a secret:// DSN reference and writing rows to the DB.
+
+        The persist override lives here rather than in the plugin so the shipped
+        example stays runnable by anyone with no database.
+        """
         monkeypatch.chdir(REPO_ROOT)
-        result = runner.invoke(
-            app, ["run", str(Path("plugins/ecommerce_example/config/extraction.yaml"))]
+        monkeypatch.setenv("EXAMPLE_DSN", test_database_url() or "")
+        spec = yaml.safe_load(
+            (REPO_ROOT / "plugins/ecommerce_example/config/extraction.yaml").read_text()
         )
+        spec["fetcher_options"]["root"] = str(REPO_ROOT / "plugins/ecommerce_example/fixtures")
+        spec["persist"] = {
+            "repositories": [
+                {
+                    "name": "postgres",
+                    "options": {
+                        "dsn": "secret://env/EXAMPLE_DSN",
+                        "table": "ecommerce_example",
+                        "mode": "upsert",
+                        "key_fields": ["sku"],
+                    },
+                }
+            ]
+        }
+        job = tmp_path / "job.yaml"
+        job.write_text(yaml.safe_dump(spec))
+
+        result = runner.invoke(app, ["run", str(job)])
         assert result.exit_code == 0, result.output
         assert "2 completed, 0 aborted" in result.output
         _cleanup_table("ecommerce_example")
@@ -171,21 +190,36 @@ class TestScaffold:
             app, ["scaffold", "new-plugin", "fresh_site", "--plugins-dir", str(plugins_dir)]
         )
         assert result.exit_code == 0, result.output
-        spec = plugins_dir / "fresh_site" / "config" / "extraction.yaml"
+
+        # The skeleton declares a runtime parameter, so `resolve` is what checks
+        # it: it applies the plugin's declared defaults and then runs every
+        # load-time check (shape, component names, selector capabilities).
         result = runner.invoke(
-            app, ["validate", str(spec), "--config-dir", str(tmp_path / "none")]
+            app,
+            ["resolve", "fresh_site", "--plugins-dir", str(plugins_dir),
+             "--config-dir", str(tmp_path / "none")],
         )
         assert result.exit_code == 0, result.output
 
-    def test_scaffold_output_even_runs(self, tmp_path, monkeypatch):
-        """Beyond the DoD: the skeleton scrapes its own sample page out of the box."""
+    def test_scaffold_output_names_a_next_step_that_works(self, tmp_path, monkeypatch):
+        """The command the scaffold prints must succeed verbatim.
+
+        It used to print `scraper validate <config>`, which cannot check a
+        parameterised config: a typed field like `engine.max_requests:
+        ${max_results}` is still a string until the resolver substitutes it.
+        """
         monkeypatch.chdir(tmp_path)
         plugins_dir = tmp_path / "plugins"
-        runner.invoke(
+        created = runner.invoke(
             app, ["scaffold", "new-plugin", "fresh_site", "--plugins-dir", str(plugins_dir)]
         )
-        spec = plugins_dir / "fresh_site" / "config" / "extraction.yaml"
-        result = runner.invoke(app, ["run", str(spec), "--config-dir", str(tmp_path / "none")])
+        assert "run-plugin fresh_site" in created.output
+
+        result = runner.invoke(
+            app,
+            ["run-plugin", "fresh_site", "--plugins-dir", str(plugins_dir),
+             "--config-dir", str(tmp_path / "none")],
+        )
         assert result.exit_code == 0, result.output
         assert (tmp_path / "output" / "fresh_site.csv").exists()
 
