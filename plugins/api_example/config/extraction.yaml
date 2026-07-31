@@ -1,0 +1,87 @@
+# api_example — the JSON-shaped worked example.
+#
+# Compare this file with plugins/ecommerce_example/config/extraction.yaml. The
+# two plugins share nothing but the engine: different parser, different selector
+# language, different pagination mechanism, different output format. Neither
+# required a line of Python or a change to core/.
+
+pipeline: [fetch, parse, discover, extract, validate, transform, persist]
+
+urls:
+  - "file://page1.json"
+
+fetcher: local_file
+fetcher_options:
+  root: "plugins/api_example/fixtures"
+
+parser: json
+
+plugin:
+  name: api_example
+  version: 1.0.0
+
+# Cursor pagination: the response carries the next page's id in its own body.
+# The chain ends by itself when a page omits `paging.next_page`.
+discover:
+  next_url:
+    kind: jsonpath
+    query: "$.paging.next_page"
+  url_template: "file://{value}"
+
+extract:
+  schema_version: "1"
+  spec:
+    sku:
+      kind: jsonpath
+      query: "$.product.sku"
+    title:
+      kind: jsonpath
+      query: "$.product.title"
+    brand:
+      kind: jsonpath
+      query: "$.product.brand"
+    price:
+      kind: jsonpath
+      query: "$.product.price.amount"
+    currency:
+      kind: jsonpath
+      query: "$.product.price.currency"
+    availability:
+      kind: jsonpath
+      query: "$.product.availability"
+
+validate:
+  validators:
+    - name: required_field
+      options: {fields: [sku, title, price]}
+    - name: duplicate
+      options: {key_fields: [sku]}
+
+transform:
+  transformers:
+    - name: enum_mapper
+      options:
+        mappings:
+          availability:
+            IN_STOCK: in_stock
+            OUT_OF_STOCK: out_of_stock
+    - name: field_enricher
+      options:
+        constants: {source: shopverse_api}
+
+persist:
+  repositories:
+    - name: jsonl
+      options:
+        path: "output/api_example.jsonl"
+        mode: upsert
+        key_fields: [sku]
+
+# --- config-spec test wiring (auto-discovered by tests/config_specs) ---
+fixture: page1.json
+sample_url: "file://page1.json"
+expect:
+  sku: "B0AURX2HDX"
+  title: "Aurora X2 Wireless Headphones"
+  brand: "Aurora"
+  currency: "INR"

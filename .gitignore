@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.import_linter_cache/
+dist/
+*.egg-info/
+.coverage
+.env
+
+# Scrape outputs and the review pile.
+#
+# These patterns MUST stay anchored with a leading slash. An unanchored
+# `quarantine/` matches a directory of that name at ANY depth, which silently
+# excluded `components/quarantine/` from every built wheel — the package
+# installed but every CLI command died on ImportError. Anchor new directory
+# ignores the same way unless you really mean "at any depth".
+/output/
+/quarantine/
+
+# Local-only files (kept out of the repo by request).
+/plans/
+/plan2.md

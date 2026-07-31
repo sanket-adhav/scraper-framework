@@ -1,0 +1,26 @@
+{
+  "product": {
+    "id": "B0AURX2HDX",
+    "name": "Aurora X2 Wireless Headphones",
+    "brand": "Aurora",
+    "price": {
+      "value": 4999.0,
+      "currency": "INR",
+      "original": 6499.0
+    },
+    "rating": {
+      "score": 4.4,
+      "count": 1284
+    },
+    "in_stock": true,
+    "tags": ["audio", "wireless", "anc"]
+  },
+  "related": [
+    {"id": "B0AURX1HDX", "name": "Aurora X1 Wireless Headphones", "price": {"value": 3499.0, "currency": "INR"}},
+    {"id": "B0NIMBUSPD", "name": "Nimbus Pods Mini", "price": {"value": 2199.0, "currency": "INR"}}
+  ],
+  "pagination": {
+    "cursor": "eyJvZmZzZXQiOiAyMH0",
+    "has_more": true
+  }
+}

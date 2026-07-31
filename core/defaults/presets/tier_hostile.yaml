@@ -1,0 +1,22 @@
+# Tier preset: HOSTILE — fingerprinting / CAPTCHA sources (plan2.md §12).
+# Full stack incl. proxy rotation. Using this tier requires a recorded cost
+# sign-off and anti-bot permission in the source-approval entry (§13).
+middleware:
+  - retry
+  - circuit_breaker
+  - rate_limit
+  - cache
+  - proxy_rotation
+  - ua_rotation
+  - cookie_manager
+  - block_detection
+  - observability
+  - cost_tracker
+
+middleware_options:
+  rate_limit: {rate: 0.25, burst: 1}
+  retry: {max_attempts: 4, base_delay_s: 2.0, max_delay_s: 120.0}
+  circuit_breaker: {failure_threshold: 3, cooldown_s: 60.0}
+  cache: {ttl_s: 600.0}
+  # proxy_rotation.proxies must be supplied per-plugin (secrets/config), e.g.:
+  # proxy_rotation: {proxies: ["http://proxy1:8080", "http://proxy2:8080"]}

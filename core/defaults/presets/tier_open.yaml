@@ -1,0 +1,11 @@
+# Tier preset: OPEN — sources with no defenses (plan2.md §12).
+# Minimal stack: just enough to be polite and observable.
+middleware:
+  - retry
+  - rate_limit
+  - block_detection
+  - observability
+
+middleware_options:
+  rate_limit: {rate: 2.0, burst: 4}
+  retry: {max_attempts: 3, base_delay_s: 0.5, max_delay_s: 30.0}

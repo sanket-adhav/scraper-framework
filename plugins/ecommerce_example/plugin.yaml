@@ -1,0 +1,10 @@
+name: ecommerce_example
+version: 1.0.0
+description: >-
+  Worked example: a product page scraped from stored HTML fixtures. Shows CSS and
+  regex selectors, an optional field, cleanup chains, enum mapping, and
+  next-link pagination — all from YAML, with no Python.
+tier: open
+source_approval: "docs/source_approval.md#SRC-EXAMPLE-fixtures-only"
+config_files:
+  - config/extraction.yaml

@@ -1,0 +1,18 @@
+# Tier preset: DEFENDED — rate/UA-sensitive sources (plan2.md §12).
+# Adds circuit breaking, UA rotation, and cookie handling; tighter rate limits.
+middleware:
+  - retry
+  - circuit_breaker
+  - rate_limit
+  - cache
+  - ua_rotation
+  - cookie_manager
+  - block_detection
+  - observability
+  - cost_tracker
+
+middleware_options:
+  rate_limit: {rate: 0.5, burst: 2}
+  retry: {max_attempts: 3, base_delay_s: 1.0, max_delay_s: 60.0}
+  circuit_breaker: {failure_threshold: 5, cooldown_s: 30.0}
+  cache: {ttl_s: 300.0}
