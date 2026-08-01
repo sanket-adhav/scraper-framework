@@ -7,7 +7,7 @@ Adding a new site normally means writing two YAML files. No base class to
 subclass, no engine to modify, no deploy to change a selector.
 
 ```bash
-scraper scaffold new-plugin my_site   # a working skeleton
+scraper scaffold new-plugin my_site   # a working skeleton + a project to put it in
 scraper run-plugin my_site            # it already scrapes its sample page
 ```
 
@@ -15,10 +15,12 @@ scraper run-plugin my_site            # it already scrapes its sample page
 
 ## Install
 
-The package is distributed from this Git repository, not from PyPI.
+The package is distributed from this Git repository, not from PyPI. **Pin the
+`package-v0.1.0` branch** — that is the curated distribution; `main` is the
+development tree and lags behind.
 
 ```bash
-pip install "git+https://github.com/<org>/scraper_framework.git"
+pip install "git+https://github.com/sanket-adhav/scraper-framework.git@package-v0.1.0"
 ```
 
 Requires **Python 3.12 or newer**. On an older interpreter pip reports a
@@ -42,6 +44,9 @@ Confirm the install:
 scraper list-components
 ```
 
+You should get a list of every available fetcher, parser, validator and the
+rest. That list is also the reference for what you may name in your YAML.
+
 > The distribution is named `chistats-scraper-framework`; the command it
 > installs is `scraper`. `scraper-framework` on PyPI is an unrelated project —
 > do not install that one.
@@ -49,10 +54,10 @@ scraper list-components
 ### Working on the framework itself
 
 ```bash
-git clone https://github.com/<org>/scraper_framework.git
-cd scraper_framework
+git clone -b package-v0.1.0 https://github.com/sanket-adhav/scraper-framework.git
+cd scraper-framework
 uv sync --dev
-uv run pytest          # 440 passed, 60 skipped
+uv run pytest          # 435 passed, 37 skipped
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the architecture rules and the four
@@ -65,14 +70,63 @@ checks CI enforces.
 ```bash
 mkdir my-scrapers && cd my-scrapers
 scraper scaffold new-plugin my_site
+```
+
+One command lays out the whole project:
+
+```
+created plugins/my_site
+  plugins/my_site/__init__.py
+  plugins/my_site/config/extraction.yaml
+  plugins/my_site/fixtures/sample.html
+  plugins/my_site/plugin.yaml
+
+project layout:
+  ├── run.py                run scrapes from Python
+  ├── .env                  secrets — never commit this
+  ├── .gitignore            excludes .env and outputs
+  ├── config/               optional: override framework defaults
+  ├── output/               your scraped data lands here
+  └── quarantine/           records that failed, for review
+```
+
+It already scrapes before you edit anything — the skeleton ships a sample HTML
+page:
+
+```bash
 scraper run-plugin my_site
 cat output/my_site.csv
 ```
 
-That works before you edit anything: the skeleton ships a sample HTML page and
-scrapes it. From there change one thing at a time — point `urls` at your real
-source, swap `fetcher: local_file` for `http`, fix the selectors — re-running
-after each change.
+```csv
+title,schema_version,plugin_name,plugin_version,config_fingerprint,source_url,scraped_at
+Sample product,1,my_site,0.1.0,61e4ccdbe66d...,file://sample.html?query=example,2026-08-01T08:23:14+00:00
+```
+
+You asked for one field and got six more free: that is **provenance**, stamped
+on every record so any row can be traced back to the plugin version, source URL
+and exact config that produced it.
+
+From there change one thing at a time — point `urls` at your real source, swap
+`fetcher: local_file` for `http`, fix the selectors — re-running after each
+change.
+
+Existing files are never overwritten, so scaffolding a second plugin creates
+only the new plugin folder and leaves your `run.py` alone.
+
+### Two starting shapes
+
+```bash
+scraper scaffold new-plugin my_site              # -t sample (default)
+scraper scaffold new-plugin my_site -t http      # the shape a real scraper has
+```
+
+| Template | You get | Use when |
+|---|---|---|
+| `sample` | Manifest, config, and a stored fixture page | Learning. Runs offline immediately |
+| `http` | Manifest and config only — HTTP fetcher, runtime params, pagination, error policy | Building against a live site |
+
+`-t http` also takes `--url` to seed the starting address.
 
 ---
 
@@ -168,12 +222,32 @@ scraper run-plugin news_feed
 Read them in that order — they are the fastest way to learn what the YAML can
 express.
 
+### Secrets
+
+Credentials never go in the YAML — the loader rejects a plaintext value under
+any credential-looking key at startup. Put the value in `.env` (the scaffold
+writes one, and gitignores it) and reference it by name:
+
+```yaml
+persist:
+  repositories:
+    - name: postgres
+      options:
+        dsn: "secret://DATABASE_URL"
+```
+
+References resolve at component-build time, after the config fingerprint is
+computed, so a secret never reaches the fingerprint stamped on your records.
+
 ---
 
 ## Running from Python
 
 Use `cli.api`. It is the same composition root the CLI uses, so a scrape started
-from Python behaves identically to one started from the terminal.
+from Python behaves identically to one started from the terminal — same
+middleware stack, same quarantine sink, same secrets provider.
+
+The scaffold already wrote you a `run.py` wired to this:
 
 ```python
 from cli.api import run_scraper
@@ -196,7 +270,7 @@ scraping) and `list_plugins` (what is available, and why anything is missing).
 
 | Command | For |
 |---|---|
-| `scraper scaffold new-plugin <name>` | Start from something that already works |
+| `scraper scaffold new-plugin <name> [-t http] [--url URL]` | Start from something that already works |
 | `scraper run-plugin <name> -p k=v` | Run a plugin with runtime parameters |
 | `scraper resolve <name> -p k=v` | Print the final config, scrape nothing. Use constantly |
 | `scraper dry-run <config.yaml>` | Run through `extract`, print records, save nothing |
