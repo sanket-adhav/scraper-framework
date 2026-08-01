@@ -223,6 +223,48 @@ class TestScaffold:
         assert result.exit_code == 0, result.output
         assert (tmp_path / "output" / "fresh_site.csv").exists()
 
+    def test_http_template_has_no_fixtures_and_resolves(self, tmp_path):
+        """`-t http` writes the shape a real scraper has: manifest + config only.
+
+        The default `sample` template ships a fixture page so the plugin runs
+        offline immediately, which is right for learning but is dead weight in a
+        plugin that fetches over the network.
+        """
+        plugins_dir = tmp_path / "plugins"
+        result = runner.invoke(
+            app,
+            ["scaffold", "new-plugin", "real_site", "-t", "http",
+             "--plugins-dir", str(plugins_dir)],
+        )
+        assert result.exit_code == 0, result.output
+
+        root = plugins_dir / "real_site"
+        written = {str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()}
+        assert written == {"plugin.yaml", "config/extraction.yaml", "__init__.py"}
+        assert not (root / "fixtures").exists()
+
+        # It must resolve — declared params, rendered placeholders, valid names.
+        result = runner.invoke(
+            app,
+            ["resolve", "real_site", "--plugins-dir", str(plugins_dir),
+             "--config-dir", str(tmp_path / "none"), "-p", "search=widgets",
+             "-p", "max_results=2"],
+        )
+        assert result.exit_code == 0, result.output
+        resolved = json.loads(result.output)
+        assert "q=widgets" in resolved["urls"][0]
+        assert resolved["engine"]["max_requests"] == 2
+        assert "${" not in json.dumps(resolved), "a placeholder survived resolution"
+
+    def test_unknown_template_is_refused(self, tmp_path):
+        result = runner.invoke(
+            app,
+            ["scaffold", "new-plugin", "x", "-t", "nope",
+             "--plugins-dir", str(tmp_path / "plugins")],
+        )
+        assert result.exit_code == 1
+        assert "unknown template" in result.output
+
     def test_existing_folder_refused(self, tmp_path):
         plugins_dir = tmp_path / "plugins"
         runner.invoke(app, ["scaffold", "new-plugin", "twice", "--plugins-dir", str(plugins_dir)])

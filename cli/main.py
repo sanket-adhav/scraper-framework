@@ -564,17 +564,37 @@ app.add_typer(scaffold_app, name="scaffold")
 @scaffold_app.command("new-plugin")
 def new_plugin(
     name: str = typer.Argument(..., help="Plugin name (lowercase identifier)"),
+    template: str = typer.Option(
+        "sample", "--template", "-t",
+        help="sample = offline skeleton with a fixture page (runs immediately); "
+             "http = real-site shape, no fixtures",
+    ),
+    url: str = typer.Option(None, "--url", help="Seed URL for the http template"),
     plugins_dir: Path = typer.Option(Path("plugins"), help="Where plugin folders live"),
 ) -> None:
-    """Creates a working plugin skeleton that passes `scraper validate` immediately."""
+    """Creates a working plugin skeleton.
+
+    `-t sample` (the default) ships a stored sample page, so the plugin scrapes
+    something the moment it is created — useful for learning the shape.
+
+    `-t http` writes the shape a real scraper has: an HTTP fetcher on a live URL,
+    runtime parameters, pagination, and no fixtures directory.
+    """
     try:
-        root = scaffold_plugin(name, plugins_dir)
-    except FileExistsError as err:
+        root = scaffold_plugin(name, plugins_dir, template=template, url=url)
+    except (FileExistsError, ValueError) as err:
         typer.echo(f"error: {err}", err=True)
         raise typer.Exit(code=1) from err
     typer.echo(f"created {root}")
-    typer.echo(f"next: scraper run-plugin {name}")
-    typer.echo(f"then edit: {root / 'config' / 'extraction.yaml'}")
+    for created in sorted(p for p in root.rglob("*") if p.is_file()):
+        typer.echo(f"  {created}")
+    if template == "http":
+        typer.echo(f"\nnext: edit {root / 'config' / 'extraction.yaml'} — set `urls` and the spec")
+        typer.echo(f"then: scraper resolve {name}          # preview, no network")
+        typer.echo(f"      scraper run-plugin {name} -p max_results=2")
+    else:
+        typer.echo(f"\nnext: scraper run-plugin {name}")
+        typer.echo(f"then edit: {root / 'config' / 'extraction.yaml'}")
 
 
 if __name__ == "__main__":
