@@ -1,0 +1,10 @@
+{
+  "product": {
+    "sku": "B0NIMBUSPD",
+    "title": "Nimbus Pro Desk Lamp",
+    "brand": "Nimbus",
+    "price": {"amount": 2199.0, "currency": "INR"},
+    "availability": "OUT_OF_STOCK"
+  },
+  "paging": {}
+}

@@ -12,9 +12,15 @@ drop in your own Python — see [§6 Extending the Framework](#6-extending-the-f
 
 1. [Overview & Architecture](#1-overview--architecture)
 2. [Installation & Quickstart](#2-installation--quickstart)
+   · [Set up your project](#set-up-your-project)
+   · [Your first scraper, end to end](#your-first-scraper-end-to-end)
 3. [The Files You Write](#3-the-files-you-write)
+   · [`plugin.yaml`](#31-pluginyaml--identity-and-parameters)
+   · [`extraction.yaml`](#32-extractionyaml--the-scraping-instructions)
+   · [Secrets and `.env`](#33-secrets-and-env)
 4. [Finding Your Selectors](#4-finding-your-selectors)
-5. [Your `run.py` — Running a Scrape](#5-your-runpy--running-a-scrape)
+5. [Running a Scrape from Python](#5-running-a-scrape-from-python)
+   · [Where your data lands](#where-your-data-lands)
 6. [Extending the Framework](#6-extending-the-framework)
 7. [Troubleshooting & Common Pitfalls](#7-troubleshooting--common-pitfalls)
 
@@ -58,29 +64,8 @@ Every page travels through the same assembly line:
 | **transform** | Standardises values (dates, currency) |
 | **persist** | Saves it |
 
-**You choose which stages run.** Skip `discover` if there's nothing to crawl,
-skip `transform` if the data is already clean.
-
-**Every stage is replaceable.** Don't like how something works? Write your own and
-name it in the YAML — [§6](#6-extending-the-framework).
-
-### The one thing that trips people up
-
-**`discover` feeds URLs back to the start.** It doesn't scrape them itself — it
-finds them and queues them. Each discovered URL then gets its own full trip
-through the pipeline.
-
-```
-Listing page  →  discover finds 50 circular links
-                        ↓
-        Each of those 50 URLs starts over at fetch
-                        ↓
-        Each produces its own record
-```
-
-That's why your **listing page usually produces no record** — it has no title, no
-PDF. That's expected, and you tell the framework to skip it. See
-[§7.2](#72-error_policy--what-happens-when-something-fails).
+**You choose which stages run**, and every one of them is replaceable — write
+your own and name it in the YAML ([§6](#6-extending-the-framework)).
 
 ---
 
@@ -112,31 +97,236 @@ pip does **not** download the browser for you.
 scraper list-components
 ```
 
-### The whole workflow
+Straight after installing — in an empty folder, before you've written anything —
+you'll see this:
 
 ```
-1. Install the package
-        ↓
-2. Create your plugin folder      →  plugin.yaml + config/extraction.yaml
-        ↓
-3. Find your selectors            →  browser inspect mode (§4)
-        ↓
-4. Create run.py                  →  pass your parameters here
-        ↓
-5. Run it                         →  python run.py
+extractor: spec_driven, table
+fetcher: authenticated_playwright, http, local_file, playwright
+middleware: block_detection, cache, circuit_breaker, cookie_manager, cost_tracker, distributed_rate_limit, observability, proxy_rotation, rate_limit, retry, ua_rotation
+parser: auto, html, json, pdf, text, xml
+repository: csv, file, json, jsonl, postgres
+transformer: currency, date, enum_mapper, field_enricher, text_cleaner, unit_converter
+validator: business_rule, duplicate, required_field, schema, type
+stage: fetch, parse, discover, extract, validate, transform, persist (from config)
 ```
 
-### Generate a starter plugin
+**If you see this, the install worked.** No errors, no missing modules.
+
+#### What you're actually looking at
+
+This is the **catalogue of parts you can name in your YAML**. Every word after a
+colon is a valid value you can drop into `extraction.yaml` — nothing else is.
+Think of it as the framework's parts list.
+
+Each line is one *kind* of part, listed alphabetically:
+
+| Line | These are… | Where you use them in YAML |
+|---|---|---|
+| `extractor:` | Ways of pulling fields out of a page | `extractor: table` |
+| `fetcher:` | Ways of downloading a page | `fetcher: http` |
+| `middleware:` | Helpers wrapped around downloading | `middleware: [retry, rate_limit]` |
+| `parser:` | Ways of reading a downloaded response | `parser: html` |
+| `repository:` | Places to save your data | `persist.repositories[].name: json` |
+| `transformer:` | Ways of tidying values after extraction | `transform.transformers[].name: date` |
+| `validator:` | Ways of checking a record is good | `validate.validators[].name: required_field` |
+
+So when the manual later says *"use `fetcher: playwright`"*, this is where that
+name comes from — and this command is how you confirm it exists in **your**
+install rather than trusting the docs.
+
+#### Reading a few of the lines
+
+```
+fetcher: authenticated_playwright, http, local_file, playwright
+```
+
+Four ways to download: plain HTTP (fast), a real browser (`playwright`, for
+JavaScript sites), a browser that logs in first, and a reader for local files
+(testing). Covered in [§3.2](#32-extractionyaml--the-scraping-instructions).
+
+```
+repository: csv, file, json, jsonl, postgres
+```
+
+Five built-in places to save. `file` is the one that downloads PDFs and images.
+Want Redis, S3, or your own warehouse? Write one —
+[§6](#6-extending-the-framework).
+
+```
+middleware: block_detection, cache, circuit_breaker, cookie_manager, cost_tracker, distributed_rate_limit, observability, proxy_rotation, rate_limit, retry, ua_rotation
+```
+
+Eleven helpers that wrap every download — retrying, slowing down, rotating
+proxies, spotting when you've been blocked. You list the ones you want; you don't
+have to use them all.
+
+#### The `stage:` line is different
+
+```
+stage: fetch, parse, discover, extract, validate, transform, persist (from config)
+```
+
+Notice the `(from config)` suffix. The other lines are things registered in the
+catalogue; **stages are built from your config file at run time**, which is why
+they're printed as a fixed reminder rather than looked up. These are the seven
+values you can put in your `pipeline:` list.
+
+#### When you have plugins, they show up too
+
+Run the same command in a folder that has a `plugins/` directory and you get
+extra lines at the bottom:
+
+```
+stage: fetch, parse, discover, extract, validate, transform, persist (from config)
+plugin: sebi_circulars v0.1.0 [open] — ok
+plugin: my_site v0.1.0 [open] — ok
+plugin: broken_one — QUARANTINED: invalid manifest my_plugins/broken_one/plugin.yaml:
+  source_approval: String should have at least 1 character
+```
+
+Read those as:
+
+| Line | Meaning |
+|---|---|
+| `plugin: <name> v<version> [<tier>] — ok` | Loaded fine. **`<name>` is what you pass to `run-plugin`** |
+| `plugin: <name> — QUARANTINED: <reason>` | Found but rejected. The reason names the exact problem |
+
+**No `plugin:` lines at all?** Either you have no `plugins/` folder yet (normal
+right after install), or you're pointing at the wrong one — add
+`--plugins-dir my_plugins`.
+
+> **This is your first debugging tool.** Any time `run-plugin` says
+> *"no loaded plugin named 'x'"*, run this. Either the plugin isn't listed (wrong
+> folder, or no `plugin.yaml`), it's quarantined with the reason printed right
+> there, or its `name:` differs from the folder name you were typing.
+
+### Set up your project
+
+**The scaffold builds the whole layout for you.** Make an empty folder, run one
+command, and you have a working project:
 
 ```bash
-mkdir -p my_plugins
-scraper scaffold new-plugin my_site --plugins-dir my_plugins
-scraper list-components --plugins-dir my_plugins
-#   → plugin: my_site v0.1.0 [open] — ok
+mkdir my-scrapers && cd my-scrapers
+scraper scaffold new-plugin quotes --plugins-dir my_plugins
 ```
 
-Always start from the scaffold — it already works, so you change one thing at a
-time.
+```
+created my_plugins/quotes
+
+my-scrapers/
+├── my_plugins/quotes/
+│   ├── plugin.yaml              identity + runtime parameters
+│   ├── config/extraction.yaml   urls, fields, validation, storage
+│   └── fixtures/sample.html     a fake page so this runs offline
+├── run.py                    run scrapes from Python
+├── .env                      secrets — never commit this
+├── .gitignore                excludes .env and outputs
+├── config/                   optional: override framework defaults
+├── output/                   your scraped data lands here
+└── quarantine/               records that failed, for review
+
+next: scraper run-plugin quotes --plugins-dir my_plugins
+then edit: my_plugins/quotes/config/extraction.yaml
+```
+
+What each piece is for:
+
+| Path | Purpose |
+|---|---|
+| `my_plugins/` | **Your scrapers** — one folder per website. This is what you edit |
+| `run.py` | Run scrapes from Python instead of the terminal ([§5](#5-running-a-scrape-from-python)). Pre-filled with this plugin's name |
+| `.env` | Secrets ([§3.3](#33-secrets-and-env)). Referenced from YAML as `secret://NAME` |
+| `.gitignore` | Keeps `.env` and scraped output out of version control |
+| `config/` | Optional. Only needed to override framework defaults |
+| `output/` | Where your scraped data lands |
+| `quarantine/` | Records that failed, kept for review |
+
+**Two things worth knowing now:**
+
+- **`--plugins-dir` defaults to `./plugins`.** Since we used `my_plugins/`, pass
+  `--plugins-dir my_plugins` on every command. Name the folder `plugins` instead
+  and you can drop the flag entirely.
+- **You do not need a `config/` folder.** Rate limiting, retry, block detection
+  and the error policy all ship inside the package. A local `config/` only
+  *overrides* them.
+
+> **Re-running the scaffold is safe.** Adding a second plugin creates only the new
+> plugin folder — your `run.py`, `.env` and everything else are left untouched.
+
+### Your first scraper, end to end
+
+Carrying on from the scaffold above — no website required, because it ships with
+a sample page so you can watch the whole loop work before pointing it at anything
+real.
+
+**1. Confirm the framework can see it.**
+
+```bash
+scraper list-components --plugins-dir my_plugins
+```
+
+```
+...
+plugin: quotes v0.1.0 [open] — ok
+```
+
+That `— ok` is the important part. Anything else and the reason is printed right
+there.
+
+**2. Preview what it would do — no network, instant.**
+
+```bash
+scraper resolve quotes --plugins-dir my_plugins
+```
+
+This prints the fully resolved config: parameters filled in, `${placeholders}`
+substituted, every startup check run. **Get in the habit of this one** — it
+catches most mistakes in about a second.
+
+**3. Run it.**
+
+```bash
+scraper run-plugin quotes --plugins-dir my_plugins
+```
+
+```
+resolved quotes with params {'search_term': 'example'}
+[*] Fetching: file://sample.html...
+[+] Extracted: Sample product
+job e5bfea0e3fea47edb3016abd8fe8cc70: 1 completed, 0 aborted, 0 quarantined
+```
+
+**4. Look at what you got.**
+
+```bash
+cat output/quotes.csv
+```
+
+```csv
+title,schema_version,plugin_name,plugin_version,config_fingerprint,source_url,scraped_at
+Sample product,1,quotes,0.1.0,626f783f63b8...,file://sample.html?query=example,2026-08-01T07:17:21.710530+00:00
+```
+
+You asked for one field (`title`) and got six extra ones for free — that's
+**provenance**, explained in [§5](#where-your-data-lands).
+
+**That's the whole loop.** Everything from here is changing what's inside those
+two YAML files.
+
+#### Now make it real
+
+The scaffold reads a local file. To point it at an actual website, edit
+`my_plugins/quotes/config/extraction.yaml`:
+
+| Change | From | To |
+|---|---|---|
+| The source | `fetcher: local_file` + `fixtures/` | `fetcher: http` |
+| The URL | `file://sample.html?query=${search_term}` | your real URL |
+| The fields | `title: h1#title` | your selectors ([§4](#4-finding-your-selectors)) |
+
+Then re-run steps 3–5. Change **one** thing at a time and re-run `resolve` after
+each — that is the fastest way to work.
 
 ### CLI commands you'll use while developing
 
@@ -145,7 +335,7 @@ time.
 | `scraper resolve <plugin>` | Print the final config. No scraping. **Use constantly** |
 | `scraper dry-run <config>` | Run up to `extract`, print records, save nothing |
 | `scraper run-plugin <plugin> -p key=value` | Run it from the terminal |
-| `scraper list-components` | Is my plugin loading? What components exist? |
+| `scraper list-components` | Is my plugin loading? What component names are valid? ([explained above](#what-youre-actually-looking-at)) |
 | `scraper quarantine list` | What failed and why? |
 
 Useful options: `--plugins-dir my_plugins`, `-p key=value`, `-f params.yaml`.
@@ -171,49 +361,30 @@ my_plugins/
 This declares who the plugin is and **what parameters callers may pass**.
 
 ```yaml
-# ─── IDENTITY ────────────────────────────────────────────────────────────────
-name: sebi_circulars              # Unique id for this plugin. Lowercase + underscores only.
-                                  # This is what you pass to run_plugin("sebi_circulars").
-                                  # NOT the folder name — this field is what counts.
+# ─── IDENTITY ───────────────────────────────────────────────────────────────
+name: sebi_circulars                # Unique id. This is what you pass to run_scraper()
+version: 0.1.0                      # Bump on logic changes; stamped onto every record
+description: "Scrapes SEBI circulars from sebi.gov.in"   # Free text, shows in list-components
+tier: open                          # Site difficulty: open | defended | hostile
+source_approval: "docs/source_approval.md#SRC-0006"      # REQUIRED, non-empty (see below)
 
-version: 0.1.0                    # Bump when you change the scraping logic.
-                                  # Stamped onto every record, so you can tell which
-                                  # version of your scraper produced which data.
+config_files:                       # Config files to load, in order
+  - config/extraction.yaml          # Later files override earlier ones, key by key
 
-description: "Scrapes SEBI circulars from sebi.gov.in"
-                                  # Free text for humans. Shows in `list-components`.
-
-tier: open                        # How hard the site fights back: open | defended | hostile.
-                                  # A hint for which middleware profile suits it.
-                                  # 'open' = no defences. Defaults to 'open'.
-
-source_approval: "docs/source_approval.md#SRC-0006"
-                                  # REQUIRED and must be non-empty. A deliberate gate:
-                                  # points at the record that someone approved scraping
-                                  # this site. Leave it blank → plugin refuses to load.
-
-config_files:                     # Which config files to load, in order.
-  - config/extraction.yaml        # Later files override earlier ones, key by key.
-                                  # Defaults to ["config/extraction.yaml"] if omitted.
-
-# ─── RUNTIME PARAMETERS ──────────────────────────────────────────────────────
-# The contract: what callers are allowed to pass. Anything not listed here is
-# rejected with an error. Anything listed here can be used as ${name} in
-# extraction.yaml.
+# ─── RUNTIME PARAMETERS ─────────────────────────────────────────────────────
+# What callers may pass. Anything not listed here is rejected; anything listed
+# here can be used as ${name} in extraction.yaml.
 params:
 
   title:
-    type: string                  # Value must be text.
-    required: false               # Caller may leave it out.
-    description: "Keyword pre-filtered on SEBI's server (&search=) and matched against the title."
-                                  # Shown to humans and in error messages.
+    type: string                    # Must be text
+    required: false                 # Caller may leave it out
+    description: "Keyword searched on SEBI's server and matched against the title."
 
   from_date:
-    type: date                    # Caller passes ISO "2026-07-01"; framework validates it.
+    type: date                      # Caller passes ISO "2026-07-01"; framework validates it
     required: false
-    format: "%d-%m-%Y"            # How to RENDER it into the URL. SEBI wants 01-07-2026,
-                                  # so the caller writes ISO and we convert. Omit this
-                                  # and it stays ISO (2026-07-01).
+    format: "%d-%m-%Y"              # How to render it into the URL — SEBI wants 01-07-2026
     description: "Start date (YYYY-MM-DD)."
 
   to_date:
@@ -223,73 +394,55 @@ params:
     description: "End date (YYYY-MM-DD)."
 
   category_id:
-    type: integer                 # Whole number only.
+    type: integer                   # Whole number only
     required: false
-    default: -1                   # Used when the caller doesn't pass one. -1 = all categories.
-    description: "The SEBI Legal category to search. Defaults to -1 (All Categories).
-                  Options: 1 (Acts), 2 (Rules), 3 (Regulations), 7 (Circulars)."
+    default: -1                     # Used when the caller passes nothing. -1 = all
+    description: "SEBI Legal category: 1 Acts, 2 Rules, 3 Regulations, 7 Circulars."
 
   max_results:
     type: integer
-    default: 50                   # Safety net so a runaway crawl can't fetch 10,000 pages.
-    description: "Cap on how many listing rows this run will follow."
+    default: 50                     # Safety net against a runaway crawl
+    description: "Cap on pages this run will fetch."
 ```
 
-#### Understanding `category_id` — where these numbers come from
+A few of those deserve a sentence each:
 
-This one confuses people, so here's the full story.
+| Field | Why it matters |
+|---|---|
+| `name` | **Not the folder name.** This field is what `run_scraper()` and `run-plugin` look up |
+| `version` | Stamped onto every record, so you can tell which version of your scraper produced which data |
+| `tier` | A hint for which middleware profile suits the site. `open` = no defences |
+| `source_approval` | **Must be non-empty** — a deliberate gate pointing at the record that someone approved scraping this site. Blank → the plugin refuses to load |
+| `format` | Dates only. The caller always writes ISO; this converts it for the site's URL. Omit it and it stays ISO |
+| `default` | Applied when the caller passes nothing, so the plugin still works with no parameters at all |
 
-Look at SEBI's own listing URL:
+#### Where each parameter comes from
 
-```
-https://www.sebi.gov.in/sebiweb/home/HomeAction.do?doListing=yes&sid=1&ssid=7&smid=0
-                                                                        ↑↑↑↑↑
-                                                       SEBI's internal category number
-```
+None of these are invented. Each one is a filter **SEBI's own website already
+has** — we just gave it a friendly name:
 
-That `ssid=` number is how **SEBI's own website** filters its Legal section. Change
-it in your browser and you get a different category of documents. It's their
-number, not ours.
+| Parameter | Maps to | Found by |
+|---|---|---|
+| `title` | `&search=` in the URL | Typing in SEBI's search box and watching the URL change |
+| `from_date` / `to_date` | `&fromDate=` / `&toDate=` | Using SEBI's date filter |
+| `category_id` | `&ssid=` | Changing SEBI's category dropdown — that number moved |
+| `max_results` | *nothing on the site* | Our own safety cap → `engine.max_requests` |
 
-So in `extraction.yaml` we put a placeholder where that number goes:
+`category_id` is the least obvious one, because it's a bare number in SEBI's URL:
 
-```yaml
-urls:
-  - "...&sid=1&ssid=${category_id}&smid=0..."
-```
-
-And in `plugin.yaml` we expose it as a parameter with a friendly name:
-
-```yaml
-category_id:
-  type: integer
-  default: -1
-```
-
-**Result:** the caller picks a category without knowing anything about SEBI's URL
-structure.
+| Value | You get |
+|---|---|
+| `-1` | Everything **(default)** |
+| `1` / `2` / `3` / `7` | Acts / Rules / Regulations / Circulars |
 
 ```python
-run_plugin("sebi_circulars", {"category_id": 7})   # only Circulars
-run_plugin("sebi_circulars", {"category_id": 3})   # only Regulations
-run_plugin("sebi_circulars")                       # default -1 → everything
+run_scraper("sebi_circulars", {"category_id": 7})   # only Circulars
+run_scraper("sebi_circulars")                       # default -1 → everything
 ```
 
-| Value | What you get |
-|---|---|
-| `-1` | All categories **(the default)** |
-| `1` | Acts |
-| `2` | Rules |
-| `3` | Regulations |
-| `7` | Circulars |
-
-> **The general lesson:** when a site has a filter in its URL (a category, a page
-> size, a sort order, a language), don't hardcode it — turn it into a parameter.
-> That's how one plugin covers many jobs.
->
-> **How to find these values yourself:** open the site, use its own filter
-> dropdown, and watch the URL change. Whatever number moves is what you expose as
-> a parameter.
+> **The transferable trick:** open the site, use its own filters, and watch which
+> bits of the URL change. Each one that moves becomes a `${parameter}` — that is
+> how one plugin covers many different jobs.
 
 #### Field reference
 
@@ -329,16 +482,16 @@ Here's the SEBI one with every line explained.
 
 ```yaml
 pipeline: [fetch, parse, discover, extract, validate, persist]
-#          │      │      │         │        │         │
-#          │      │      │         │        │         └─ save the record
-#          │      │      │         │        └─────────── check it's worth saving
-#          │      │      │         └──────────────────── pull out title/date/pdf_link
-#          │      │      └────────────────────────────── find the 50 circular links
-#          │      └───────────────────────────────────── make the HTML queryable
-#          └──────────────────────────────────────────── download the page
 #
-# 'transform' is omitted here — this data needs no cleanup beyond the
-# per-field cleanups. Add it if you need date/currency normalising.
+#   fetch      download the listing page
+#   parse      make the HTML queryable
+#   discover   find the 50 circular links, queue them
+#   extract    pull out title / date / pdf_link
+#   validate   check the record is worth saving
+#   persist    save it — JSON metadata + the PDF file
+#
+# 'transform' is omitted — this data needs no cleanup beyond the per-field
+# `cleanup:` chains. Add the stage if you need date or currency normalising.
 ```
 
 #### Where to start
@@ -552,6 +705,86 @@ Need Redis, S3, or your own warehouse? [§6](#6-extending-the-framework).
 
 ---
 
+### 3.3 Secrets and `.env`
+
+The moment you use the `postgres` repository, a proxy, or a login, you have a
+credential — and **you cannot put it in the YAML**. The framework refuses to
+start:
+
+```
+error: config key 'persist.repositories[0].options.dsn' looks like a credential
+       but is plaintext; use a secret:// reference instead
+```
+
+That is deliberate, not a nuisance. YAML files get committed; credentials
+shouldn't.
+
+#### How to do it instead
+
+**1. Put the real value in `.env`** at your project root:
+
+```bash
+# .env  — never commit this file
+DATABASE_URL=postgresql://user:realpassword@localhost:5432/scrapes
+PROXY_URL=http://user:pass@proxy.example.com:8080
+```
+
+**2. Reference it in the YAML** with `secret://` plus the variable name:
+
+```yaml
+persist:
+  repositories:
+    - name: postgres
+      options:
+        dsn: "secret://DATABASE_URL"    # ← the NAME of the env var, not the value
+        table: "circulars"
+```
+
+**3. Run normally.** The CLI loads `.env` automatically — no extra flag, no
+`export`.
+
+```bash
+scraper run-plugin my_site --plugins-dir my_plugins
+```
+
+#### What the framework does with it
+
+| Step | What happens |
+|---|---|
+| Config loads | `secret://DATABASE_URL` stays a placeholder |
+| Fingerprint computed | Computed on the **placeholder** — the real secret never enters it |
+| Component built | Resolved to the real value, at the last possible moment |
+
+So your credential never reaches the config fingerprint stamped onto every record,
+and never appears in logs.
+
+#### Which keys trigger the check
+
+Any key whose **name** looks credential-ish: `password`, `passwd`, `secret`,
+`token`, `api_key`, `apikey`, `credential`. If it holds a plaintext string, the
+run is refused.
+
+One deliberate exception — keys ending in `_selector`:
+
+```yaml
+password_selector: "input[name='password']"   # ✅ fine — a CSS selector, not a secret
+password: "hunter2"                            # ❌ refused
+```
+
+#### Add `.env` to `.gitignore`
+
+```gitignore
+.env
+output/
+quarantine/
+```
+
+> **In production**, skip `.env` and set real environment variables through your
+> deployment system. `secret://VAR` reads from the environment either way, so no
+> config change is needed between local and production.
+
+---
+
 ## 4. Finding Your Selectors
 
 You need to tell the framework *where* the data sits on the page. Here's the
@@ -741,37 +974,22 @@ The whole point: **same plugin, different jobs, no YAML edits.**
 
 ```python
 # Search by keyword
-run_plugin("sebi_circulars", {"title": "Mutual Fund Regulations"})
+run_scraper("sebi_circulars", {"title": "Mutual Fund Regulations"})
 
 # Search by date range
-run_plugin("sebi_circulars", {"from_date": "2026-07-01", "to_date": "2026-07-28"})
+run_scraper("sebi_circulars", {"from_date": "2026-07-01", "to_date": "2026-07-28"})
 
 # Only Circulars, capped at 20 pages
-run_plugin("sebi_circulars", {"category_id": 7, "max_results": 20})
+run_scraper("sebi_circulars", {"category_id": 7, "max_results": 20})
 
 # Everything
-run_plugin("sebi_circulars")
+run_scraper("sebi_circulars")
 ```
 
-### What parameters can I pass?
-
-Whatever the plugin declared in its `params:` block. For `sebi_circulars`:
-
-| Parameter | Type | Example | What it does |
-|---|---|---|---|
-| `title` | string | `"Mutual Fund"` | Keyword search + keeps only matching titles |
-| `from_date` | date | `"2026-07-01"` | Start of the date range |
-| `to_date` | date | `"2026-07-28"` | End of the date range |
-| `category_id` | integer | `7` | -1=all, 1=Acts, 2=Rules, 3=Regulations, 7=Circulars |
-| `max_results` | integer | `20` | Cap on pages fetched (listing page counts) |
-
-**Rules:**
-
-- Dates are **ISO format**: `"2026-07-01"`, not `01/07/2026`. The plugin's
-  `format:` handles converting it for the URL.
-- Leave a parameter out → it's ignored, and any filter using it switches off.
-- Typo a name → error listing the valid ones, **before** any network call.
-- Wrong type → error before any network call.
+Which parameters a plugin accepts is whatever it declared in its `params:` block
+— see [§3.1](#31-pluginyaml--identity-and-parameters). Dates always go in as ISO
+`"2026-07-01"`; the plugin's `format:` converts them for the URL. Leave one out
+and it is simply ignored.
 
 ### Checking parameters without scraping
 
@@ -779,28 +997,24 @@ Whatever the plugin declared in its `params:` block. For `sebi_circulars`:
 traffic, and load on someone else's server — you can ask the framework *"if I gave
 you these parameters, what exactly would you do?"*
 
-It runs the whole preparation step (load plugin → validate params → apply defaults
-→ build the URL) and then **stops**. Nothing is fetched, nothing is saved.
+`resolve_plugin()` runs the whole preparation step (load plugin → validate params
+→ apply defaults → build the URL) and then **stops**. Nothing is fetched, nothing
+is saved.
 
 ```python
-from pathlib import Path
-from core.registry.registry import Registry
-from core.runtime import JobResolver
+from cli.api import resolve_plugin
 
-# Load the plugins folder once
-resolver = JobResolver.from_directory(Path("my_plugins"), Registry())
-
-# Ask: what would these params actually produce?
-resolved = resolver.resolve("sebi_circulars", {"title": "Mutual Fund"})
+resolved = resolve_plugin("sebi_circulars", {"title": "Mutual Fund"},
+                          plugins_dir="my_plugins")
 
 print(resolved.params)
 # → {'title': 'Mutual Fund', 'category_id': -1, 'max_results': 50}
-#   Note category_id and max_results appeared — those are the DEFAULTS
-#   from plugin.yaml, filled in for you.
+#   category_id and max_results appeared on their own — those are the
+#   DEFAULTS from plugin.yaml, filled in for you.
 
 print(resolved.config["urls"][0])
 # → https://www.sebi.gov.in/...&ssid=-1&search=Mutual Fund&fromDate=&toDate=
-#   The real URL. Notice fromDate/toDate are EMPTY because you didn't pass them.
+#   The real URL. Note fromDate/toDate are EMPTY because you didn't pass them.
 ```
 
 **Three things this catches instantly:**
@@ -828,7 +1042,7 @@ scraper resolve sebi_circulars --plugins-dir my_plugins -p title="Mutual Fund"
 
 ### What you get back
 
-`run_plugin()` returns a `JobResult`:
+`run_scraper()` returns a `JobResult`:
 
 | Field | Meaning |
 |---|---|
@@ -839,7 +1053,7 @@ scraper resolve sebi_circulars --plugins-dir my_plugins -p title="Mutual Fund"
 | `results` | Per-page detail, if you need to dig in |
 
 ```python
-result = run_plugin("sebi_circulars", {"title": "Mutual Fund"})
+result = run_scraper("sebi_circulars", {"title": "Mutual Fund"})
 
 print(result.completed)    # 7   → seven circulars saved
 print(result.discarded)    # 1   → one didn't match the title filter
@@ -861,7 +1075,7 @@ can catch everything. But catching the specific ones tells you what to do:
 from core.errors.exceptions import ScraperError, ParamError, PluginError
 
 try:
-    result = run_plugin("sebi_circulars", {"title": "Mutual Fund"})
+    result = run_scraper("sebi_circulars", {"title": "Mutual Fund"})
 
 except ParamError as e:
     # YOUR INPUT is wrong: unknown parameter name, missing required one,
@@ -899,7 +1113,7 @@ the stuff that will always fail:
 
 ```python
 try:
-    result = run_plugin(PLUGIN, PARAMS)
+    result = run_scraper(PLUGIN, PARAMS)
 except (ParamError, PluginError) as e:
     alert_the_team(f"Scraper is misconfigured: {e}")   # a human must fix this
     raise
@@ -937,6 +1151,83 @@ max_results: 10
 ```bash
 scraper run-plugin sebi_circulars -f params.yaml --plugins-dir my_plugins
 ```
+
+### Where your data lands
+
+Two folders appear in your project on first use. Neither needs creating.
+
+```
+my-scrapers/
+├── output/                  ← your scraped data (paths come from your YAML)
+└── quarantine/
+    └── quarantine.jsonl     ← records that failed, one JSON object per line
+```
+
+**`output/`** — you control this entirely. Whatever `path` or `output_dir` you set
+under `persist.repositories` is where files go:
+
+```yaml
+persist:
+  repositories:
+    - name: json
+      options: {path: "output/circulars.json"}     # → my-scrapers/output/circulars.json
+    - name: file
+      options: {output_dir: "output/pdfs/sebi"}    # → my-scrapers/output/pdfs/sebi/*.pdf
+```
+
+Paths are relative to **where you run the command**, so always run from your
+project root.
+
+**`quarantine/quarantine.jsonl`** — anything that failed in a way you chose to
+keep. Nothing is ever silently lost:
+
+```bash
+scraper quarantine list
+```
+
+```
+8b11be0a62bd4db281e7b90456594d8e [extract] ExtractionError: required field 'title'
+                                  matched nothing (css: 'h1#does-not-exist')
+— 1 quarantined records
+```
+
+```bash
+scraper quarantine inspect 8b11be0a62bd4db281e7b90456594d8e   # the full snapshot
+scraper quarantine discard                                     # clear the pile
+```
+
+> The pile is **global and cumulative** — it keeps growing across runs until you
+> clear it. Worth a `scraper quarantine discard` when you start debugging
+> something new, so you're only looking at fresh failures.
+
+### What's inside a record
+
+You asked for one field and got seven columns. Here's why:
+
+```csv
+title,schema_version,plugin_name,plugin_version,config_fingerprint,source_url,scraped_at
+Sample product,1,quotes,0.1.0,626f783f63b8...,file://sample.html?query=example,2026-08-01T07:17:21.710530+00:00
+```
+
+Everything after your own fields is **provenance** — added automatically so any
+row can be traced back to exactly what produced it:
+
+| Column | What it tells you |
+|---|---|
+| `schema_version` | The `schema_version` from your `extract:` block. Bump it when you change the field set, and downstream consumers can tell old rows from new |
+| `plugin_name` | Which plugin produced this row |
+| `plugin_version` | Which `version:` of that plugin — so you know if a row predates a fix |
+| `config_fingerprint` | SHA-256 of the fully resolved config. **Two rows with different fingerprints were scraped under different settings** |
+| `source_url` | The exact URL this row came from. Paste it in a browser to check |
+| `scraped_at` | UTC timestamp |
+
+**Why it matters in practice:** six months from now, when a number looks wrong,
+these columns answer "which version of which scraper, against which URL, under
+what settings?" without you having to remember anything.
+
+> **Note on secrets:** `config_fingerprint` is computed *before* `secret://`
+> references are resolved, so credentials never reach it — see
+> [§3.3](#33-secrets-and-env).
 
 ---
 
@@ -1102,139 +1393,40 @@ row.
 
 ---
 
-### Scenario 3: "I need a validation rule the built-ins can't express"
+### Every stage can be extended the same way
 
-`business_rule` handles comparisons. For real logic — a checksum, a lookup, a
-regex across several fields — write a validator.
+Those two scenarios are the whole mechanism. **Every other part of the pipeline
+works identically** — write the class, declare it under `components:`, reference
+it as `<plugin>.<nickname>`. The only thing that changes is which method you
+implement:
 
-**A validator takes a record and returns a pass/fail result:**
+| Kind | Implement | Signature | Use it for |
+|---|---|---|---|
+| `fetcher` | `fetch` | `async def fetch(self, request) -> Response` | A different way to download |
+| `parser` | `parse` | `def parse(self, response) -> Document` ¹ | A format not yet supported |
+| `extractor` | `extract` | `def extract(self, doc, spec, *, source_url="") -> Record` | Different field-pulling logic |
+| `validator` | `validate` | `def validate(self, record) -> ValidationResult` | Rules `business_rule` can't express |
+| `transformer` | `transform` | `def transform(self, record) -> Record` | Cleanup the built-ins don't cover |
+| `repository` | `save` | `async def save(self, record) -> None` | A new storage backend |
+| `middleware` | `__call__` | `async def __call__(self, request, next) -> Response` | Custom auth, headers, throttling |
+| `stage` | `run` + `on_error` | `async def run(self, ctx) -> Context` | A brand-new pipeline step |
 
-```python
-# my_plugins/sebi_circulars/my_validator.py
-"""Rejects circulars whose reference number doesn't match our format."""
+¹ A parser also needs two class attributes: `content_types` (which types it
+accepts) and `document_type` (the `Document` class it produces).
 
-import re
-from core.contracts.validator import FieldFailure, ValidationResult
-from core.models.record import Record
-
-
-class ReferenceFormatValidator:
-    """Checks `reference` looks like CIR/ABC/12/2026."""
-
-    def __init__(self, pattern: str = r"^CIR/[A-Z]+/\d+/\d{4}$") -> None:
-        self._pattern = re.compile(pattern)
-
-    def validate(self, record: Record) -> ValidationResult:
-        value = record.data.get("reference")
-        if value and not self._pattern.match(str(value)):
-            return ValidationResult(
-                valid=False,
-                failures=(FieldFailure(field="reference",
-                                       message=f"bad reference format: {value!r}"),),
-            )
-        return ValidationResult(valid=True, failures=())
-```
-
-```yaml
-components:
-  validator:
-    ref_format: "my_validator.py:ReferenceFormatValidator"
-```
-
-```yaml
-validate:
-  validators:
-    - name: required_field
-      options: {fields: [title]}
-    - name: sebi_circulars.ref_format     # yours runs alongside the built-ins
-      options:
-        pattern: "^CIR/[A-Z]+/\\d+/\\d{4}$"
-```
-
----
-
-### Scenario 4: "I need a transformation the built-ins don't cover"
-
-Same shape. A transformer takes a record and returns a modified one:
-
-```python
-# my_plugins/sebi_circulars/my_transformer.py
-"""Converts SEBI's date format into ISO."""
-
-from datetime import datetime
-from core.models.record import Record
-
-
-class SebiDateTransformer:
-    """Turns 'Jul 21, 2026' into '2026-07-21'."""
-
-    def __init__(self, field: str = "date") -> None:
-        self._field = field
-
-    def transform(self, record: Record) -> Record:
-        raw = record.data.get(self._field)
-        if raw:
-            record.data[self._field] = datetime.strptime(str(raw), "%b %d, %Y").date().isoformat()
-        return record
-```
-
-```yaml
-components:
-  transformer:
-    sebi_date: "my_transformer.py:SebiDateTransformer"
-```
-
-```yaml
-pipeline: [fetch, parse, discover, extract, validate, transform, persist]
-#                                                     ↑ add the stage
-
-transform:
-  transformers:
-    - name: sebi_circulars.sebi_date
-      options: {field: "date"}
-```
-
-> Check the built-in `date` transformer first — it handles most formats already.
-
----
-
-### Scenario 5: "I need a whole new pipeline stage"
-
-Rare, but supported. Say you want to OCR scanned PDFs between `parse` and
-`extract`. A stage needs a `name`, an async `run(ctx)`, and an `on_error`:
-
-```python
-# my_plugins/sebi_circulars/ocr_stage.py
-"""Runs OCR on scanned pages before extraction."""
-
-from core.contracts.stage import ErrorAction
-
-
-class OcrStage:
-    name = "ocr"
-
-    def __init__(self, language: str = "eng") -> None:
-        self._language = language
-
-    async def run(self, ctx):
-        # ctx carries everything so far: ctx.request, ctx.response, ctx.document
-        # ...do your OCR, attach the result...
-        return ctx
-
-    def on_error(self, ctx, err) -> ErrorAction:
-        return ErrorAction.SKIP      # fallback when error_policy says nothing
-```
-
-```yaml
-components:
-  stage:
-    ocr: "ocr_stage.py:OcrStage"
-```
+A **custom stage** has one extra step — slot it into the pipeline where it belongs:
 
 ```yaml
 pipeline: [fetch, parse, sebi_circulars.ocr, extract, validate, persist]
-#                        ↑ slot it in wherever it belongs
+#                        ↑ your stage
 ```
+
+The exact protocol for each kind lives in `core/contracts/`. If your class doesn't
+satisfy it, the plugin is quarantined at load time with a message naming the
+missing method — you'll know immediately, not mid-scrape.
+
+> **Check the built-ins first.** `scraper list-components` prints everything that
+> already exists — the `date` transformer alone handles most date formats.
 
 ---
 
@@ -1257,14 +1449,17 @@ registry.register("repository", "warehouse", WarehouseRepository)
 
 | Situation | Do this |
 |---|---|
-| Different storage backend | Custom **repository** (Scenario 1) |
-| Extra/computed fields | Inherit the **extractor** (Scenario 2) |
-| Complex validation logic | Custom **validator** (Scenario 3) |
-| Custom data cleanup | Custom **transformer** (Scenario 4) |
-| A brand-new processing step | Custom **stage** (Scenario 5) |
+| Different storage backend | Custom **repository** — [Scenario 1](#scenario-1-i-want-to-save-to-redis-instead-of-a-json-file) |
+| Extra/computed fields | Inherit the **extractor** — [Scenario 2](#scenario-2-i-want-to-add-computed-fields-during-extraction) |
+| Complex validation logic | Custom **validator** |
+| Custom data cleanup | Custom **transformer** |
+| A brand-new processing step | Custom **stage** |
 | Special auth / headers / proxies | Custom **middleware** or **fetcher** |
 | Used by one plugin | Declare it in that plugin's `components:` |
 | Used by many plugins | `registry.register(...)` in your `run.py` |
+
+The last six all follow the pattern in
+[Every stage can be extended the same way](#every-stage-can-be-extended-the-same-way).
 
 > **Check before you build.** `scraper list-components` prints everything that
 > already exists. There's a decent chance it's in there.
@@ -1538,8 +1733,8 @@ Not there? You need `playwright`.
 ## Quick reference
 
 ```bash
-# Setup
-pip install scraper-framework
+# Setup  (from Git — NOT `pip install scraper-framework`, that is someone else's package)
+pip install "git+https://github.com/<org>/scraper_framework.git"
 playwright install chromium                              # only for JS sites
 scraper scaffold new-plugin my_site --plugins-dir my_plugins
 

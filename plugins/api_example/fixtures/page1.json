@@ -1,0 +1,12 @@
+{
+  "product": {
+    "sku": "B0AURX2HDX",
+    "title": "Aurora X2 Wireless Headphones",
+    "brand": "Aurora",
+    "price": {"amount": 4999.0, "currency": "INR"},
+    "availability": "IN_STOCK"
+  },
+  "paging": {
+    "next_page": "page2.json"
+  }
+}

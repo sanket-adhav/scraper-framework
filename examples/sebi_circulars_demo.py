@@ -24,7 +24,10 @@ os.chdir(REPO_ROOT)
 
 # ─── 👇 EDIT THIS BLOCK ───────────────────────────────────────────────────────
 
-TITLE = "SEBI (Prohibition on Raising Further Capital From Public and Transfer of Securities of Suspended Companies) Order, 2015."
+TITLE = (
+    "SEBI (Prohibition on Raising Further Capital From Public and Transfer "
+    "of Securities of Suspended Companies) Order, 2015."
+)
 
 FROM_DATE = None          # e.g. "2026-07-01"
 TO_DATE = None            # e.g. "2026-07-28"

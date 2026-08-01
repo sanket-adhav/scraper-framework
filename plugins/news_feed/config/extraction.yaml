@@ -1,0 +1,99 @@
+# news_feed — the third-shape plugin, built through public seams only.
+# Different from both Phase-1 plugins: XML parser, XPath selectors, page-link
+# pagination, date normalization, and a per-plugin error-policy override.
+
+pipeline: [fetch, parse, discover, extract, validate, transform, persist]
+
+urls:
+  - "file://feed_page1.xml"
+
+fetcher: local_file
+fetcher_options:
+  root: "plugins/news_feed/fixtures"
+
+parser: xml
+
+plugin:
+  name: news_feed
+  version: 1.0.0
+
+# Follow the <nextpage> link until a page omits it.
+discover:
+  next_url:
+    kind: xpath
+    query: "//nextpage/text()"
+  url_template: "file://{value}"
+
+extract:
+  schema_version: "1"
+  spec:
+    sku:
+      kind: xpath
+      query: "//guid/text()"
+    title:
+      kind: xpath
+      query: "//title/text()"
+    category:
+      kind: xpath
+      query: "//category/text()"
+    price:
+      kind: xpath
+      query: "//price/text()"
+      cleanup: [to_float]
+    currency:
+      kind: xpath
+      query: "//price/@currency"
+    published:
+      kind: xpath
+      query: "//pubDate/text()"
+
+validate:
+  validators:
+    - name: required_field
+      options: {fields: [sku, title, price]}
+    - name: business_rule
+      options:
+        rules:
+          - {field: price, op: ">", value: 0}
+    - name: duplicate
+      options: {key_fields: [sku]}
+
+transform:
+  transformers:
+    - name: date
+      options:
+        fields: [published]
+        input_formats: ["%d %B %Y"]
+    - name: enum_mapper
+      options:
+        mappings:
+          category: {Audio: audio, Home: home_goods}
+    - name: field_enricher
+      options:
+        constants: {source: shopverse_feed}
+
+# Per-plugin error-policy override (plan2.md §10, Plan 08): this plugin treats a
+# transform failure as SKIP rather than the framework default of QUARANTINE.
+error_policy:
+  stages:
+    transform:
+      TransformError: skip
+
+persist:
+  repositories:
+    - name: jsonl
+      options:
+        path: "output/news_feed.jsonl"
+        mode: upsert
+        key_fields: [sku]
+
+# --- config-spec test wiring (auto-discovered by tests/config_specs) ---
+fixture: feed_page1.xml
+sample_url: "file://feed_page1.xml"
+expect:
+  sku: "B0AURX2HDX"
+  title: "Aurora X2 Wireless Headphones"
+  category: "Audio"
+  price: 4999.0
+  currency: "INR"
+  published: "17 July 2026"
