@@ -1,0 +1,11 @@
+name: api_example
+version: 1.0.0
+description: >-
+  Worked example with a deliberately different shape to ecommerce_example: a
+  JSON API read from stored fixtures, addressed with JSONPath, paginated by a
+  cursor in the response body, persisted as JSONL. Same engine, zero core
+  changes — that is the point of it.
+tier: open
+source_approval: "docs/source_approval.md#SRC-EXAMPLE-fixtures-only"
+config_files:
+  - config/extraction.yaml

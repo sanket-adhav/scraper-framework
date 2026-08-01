@@ -1,0 +1,7 @@
+name: news_feed
+version: 1.0.0
+description: "ShopVerse deals RSS feed (synthetic XML fixtures) — the third-shape plugin (XML parse, XPath, feed pagination), built through public seams only to prove extensibility."
+tier: open
+source_approval: "docs/source_approval.md#SRC-0003"
+config_files:
+  - config/extraction.yaml
