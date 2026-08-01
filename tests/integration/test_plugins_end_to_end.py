@@ -231,3 +231,39 @@ class TestScaffold:
         )
         assert result.exit_code == 1
         assert "already exists" in result.output
+
+    def test_scaffold_lays_out_the_whole_project(self, tmp_path):
+        """A fresh install should get somewhere obvious to put everything, not
+        just a plugin folder."""
+        plugins_dir = tmp_path / "my_plugins"
+        result = runner.invoke(
+            app, ["scaffold", "new-plugin", "fresh_site", "--plugins-dir", str(plugins_dir)]
+        )
+        assert result.exit_code == 0, result.output
+
+        for name in ("run.py", ".env", ".gitignore"):
+            assert (tmp_path / name).is_file(), f"{name} not created"
+        for name in ("config", "output", "quarantine"):
+            assert (tmp_path / name).is_dir(), f"{name}/ not created"
+
+        # The generated run.py must name this plugin and its folder, and must
+        # use the public API rather than a private CLI helper.
+        run_py = (tmp_path / "run.py").read_text()
+        assert 'PLUGIN = "fresh_site"' in run_py
+        assert 'PLUGINS_DIR = "my_plugins"' in run_py
+        assert "from cli.api import run_scraper" in run_py
+
+        # .gitignore must keep secrets out of version control.
+        assert ".env" in (tmp_path / ".gitignore").read_text()
+
+    def test_scaffold_never_overwrites_project_files(self, tmp_path):
+        """Scaffolding a second plugin must not clobber the run.py you edited."""
+        plugins_dir = tmp_path / "plugins"
+        runner.invoke(app, ["scaffold", "new-plugin", "first", "--plugins-dir", str(plugins_dir)])
+        (tmp_path / "run.py").write_text("# my own edits\n")
+
+        result = runner.invoke(
+            app, ["scaffold", "new-plugin", "second", "--plugins-dir", str(plugins_dir)]
+        )
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / "run.py").read_text() == "# my own edits\n"

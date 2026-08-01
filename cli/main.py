@@ -17,7 +17,7 @@ import dotenv
 import typer
 
 from cli.composition import build_event_bus, default_registry, register_default_stages
-from cli.scaffold import scaffold_plugin
+from cli.scaffold import scaffold_plugin, scaffold_project
 from components.quarantine.file_sink import FileQuarantineSink
 from components.secrets.env_provider import EnvSecretsProvider
 from core.config.loader import ConfigLayer, ResolvedConfig, load_config
@@ -566,14 +566,40 @@ def new_plugin(
     name: str = typer.Argument(..., help="Plugin name (lowercase identifier)"),
     plugins_dir: Path = typer.Option(Path("plugins"), help="Where plugin folders live"),
 ) -> None:
-    """Creates a working plugin skeleton that passes `scraper validate` immediately."""
+    """Creates a working plugin skeleton that passes `scraper validate` immediately.
+
+    Also lays out the surrounding project (run.py, .env, output/, quarantine/)
+    the first time, so a fresh install has somewhere obvious to put everything.
+    Existing files are never overwritten."""
     try:
         root = scaffold_plugin(name, plugins_dir)
     except FileExistsError as err:
         typer.echo(f"error: {err}", err=True)
         raise typer.Exit(code=1) from err
+    project_files = scaffold_project(name, plugins_dir)
+
+    labels = {
+        "run.py": "run scrapes from Python",
+        ".env": "secrets — never commit this",
+        ".gitignore": "excludes .env and outputs",
+        "config": "optional: override framework defaults",
+        "output": "your scraped data lands here",
+        "quarantine": "records that failed, for review",
+    }
+    project = plugins_dir.parent
     typer.echo(f"created {root}")
-    typer.echo(f"next: scraper run-plugin {name}")
+    typer.echo("")
+    typer.echo(f"{project.resolve().name}/")
+    typer.echo(f"├── {plugins_dir.name}/{name}/")
+    typer.echo("│   ├── plugin.yaml              identity + runtime parameters")
+    typer.echo("│   ├── config/extraction.yaml   urls, fields, validation, storage")
+    typer.echo("│   └── fixtures/sample.html     a fake page so this runs offline")
+    for i, path in enumerate(project_files):
+        elbow = "└──" if i == len(project_files) - 1 else "├──"
+        suffix = "/" if path.is_dir() else ""
+        typer.echo(f"{elbow} {path.name}{suffix}".ljust(30) + labels.get(path.name, ""))
+    typer.echo("")
+    typer.echo(f"next: scraper run-plugin {name} --plugins-dir {plugins_dir}")
     typer.echo(f"then edit: {root / 'config' / 'extraction.yaml'}")
 
 

@@ -78,6 +78,48 @@ SAMPLE_FIXTURE = """\
 </html>
 """
 
+RUN_PY_TEMPLATE = '''\
+"""Run a scraper from Python. Edit PARAMS, then: python run.py"""
+
+from cli.api import run_scraper
+
+PLUGINS_DIR = "{plugins_dir}"
+PLUGIN = "{name}"
+
+# Whatever the plugin declares under `params:` in its plugin.yaml.
+PARAMS: dict[str, object] = {{
+    "search_term": "example",
+}}
+
+if __name__ == "__main__":
+    result = run_scraper(PLUGIN, PARAMS, plugins_dir=PLUGINS_DIR)
+    print(result)
+    # `ok` is False if anything aborted OR was quarantined — check this,
+    # not `aborted`, or you will call a run with 300 failures a success.
+    raise SystemExit(0 if result.ok else 1)
+'''
+
+ENV_TEMPLATE = """\
+# Secrets for your scrapers. Referenced from YAML as secret://NAME.
+# NEVER commit this file.
+#
+# Example — a Postgres destination:
+#   DATABASE_URL=postgresql://user:password@localhost:5432/scrapes
+# then in extraction.yaml:
+#   persist:
+#     repositories:
+#       - name: postgres
+#         options: {dsn: "secret://DATABASE_URL"}
+"""
+
+GITIGNORE_TEMPLATE = """\
+.env
+output/
+quarantine/
+__pycache__/
+*.pyc
+"""
+
 
 def scaffold_plugin(name: str, plugins_dir: Path) -> Path:
     """Writes a complete plugin skeleton and returns its folder path."""
@@ -94,3 +136,32 @@ def scaffold_plugin(name: str, plugins_dir: Path) -> Path:
     (root / "fixtures" / "sample.html").write_text(SAMPLE_FIXTURE, encoding="utf-8")
     (root / "__init__.py").write_text("", encoding="utf-8")
     return root
+
+
+def scaffold_project(name: str, plugins_dir: Path) -> list[Path]:
+    """Creates the surrounding project layout next to the plugins folder.
+
+    Writes run.py, .env, .gitignore and the config/ output/ quarantine/ folders,
+    so a fresh install has somewhere obvious to put everything. Anything that
+    already exists is left untouched — re-running the scaffold for a second
+    plugin never overwrites your edits. Returns only what it actually created."""
+    project = plugins_dir.parent
+    created: list[Path] = []
+
+    files = {
+        project / "run.py": RUN_PY_TEMPLATE.format(name=name, plugins_dir=plugins_dir.name),
+        project / ".env": ENV_TEMPLATE,
+        project / ".gitignore": GITIGNORE_TEMPLATE,
+    }
+    for path, body in files.items():
+        if not path.exists():
+            path.write_text(body, encoding="utf-8")
+            created.append(path)
+
+    for folder in ("config", "output", "quarantine"):
+        path = project / folder
+        if not path.exists():
+            path.mkdir(parents=True)
+            created.append(path)
+
+    return created
