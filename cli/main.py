@@ -17,7 +17,7 @@ import dotenv
 import typer
 
 from cli.composition import build_event_bus, default_registry, register_default_stages
-from cli.scaffold import scaffold_plugin
+from cli.scaffold import PROJECT_LABELS, scaffold_plugin, scaffold_project
 from components.quarantine.file_sink import FileQuarantineSink
 from components.secrets.env_provider import EnvSecretsProvider
 from core.config.loader import ConfigLayer, ResolvedConfig, load_config
@@ -585,9 +585,19 @@ def new_plugin(
     except (FileExistsError, ValueError) as err:
         typer.echo(f"error: {err}", err=True)
         raise typer.Exit(code=1) from err
+    project_files = scaffold_project(name, plugins_dir, template=template)
+
     typer.echo(f"created {root}")
     for created in sorted(p for p in root.rglob("*") if p.is_file()):
         typer.echo(f"  {created}")
+    if project_files:
+        # Only printed the first time — a second plugin creates none of these.
+        typer.echo("\nproject layout:")
+        for i, path in enumerate(project_files):
+            elbow = "└──" if i == len(project_files) - 1 else "├──"
+            suffix = "/" if path.is_dir() else ""
+            label = PROJECT_LABELS.get(path.name, "")
+            typer.echo(f"  {elbow} {path.name}{suffix}".ljust(28) + label)
     if template == "http":
         typer.echo(f"\nnext: edit {root / 'config' / 'extraction.yaml'} — set `urls` and the spec")
         typer.echo(f"then: scraper resolve {name}          # preview, no network")

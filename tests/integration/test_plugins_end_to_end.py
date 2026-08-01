@@ -4,9 +4,11 @@ scaffold output validates immediately, and quarantine shows in list-components."
 
 import csv
 import json
+import re
 import shutil
 from pathlib import Path
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -273,3 +275,65 @@ class TestScaffold:
         )
         assert result.exit_code == 1
         assert "already exists" in result.output
+
+    def test_scaffold_lays_out_the_whole_project(self, tmp_path):
+        """A fresh install should get somewhere obvious to put everything, not
+        just a plugin folder."""
+        plugins_dir = tmp_path / "my_plugins"
+        result = runner.invoke(
+            app, ["scaffold", "new-plugin", "fresh_site", "--plugins-dir", str(plugins_dir)]
+        )
+        assert result.exit_code == 0, result.output
+
+        for name in ("run.py", ".env", ".gitignore"):
+            assert (tmp_path / name).is_file(), f"{name} not created"
+        for name in ("config", "output", "quarantine"):
+            assert (tmp_path / name).is_dir(), f"{name}/ not created"
+
+        # The generated run.py must name this plugin and its folder, and must
+        # use the public API rather than a private CLI helper.
+        run_py = (tmp_path / "run.py").read_text()
+        assert 'PLUGIN = "fresh_site"' in run_py
+        assert 'PLUGINS_DIR = "my_plugins"' in run_py
+        assert "from cli.api import run_scraper" in run_py
+
+        # .gitignore must keep secrets out of version control.
+        assert ".env" in (tmp_path / ".gitignore").read_text()
+
+    @pytest.mark.parametrize("template", ["sample", "http"])
+    def test_generated_run_py_params_match_the_manifest(self, tmp_path, template):
+        """run.py must only name params the template's manifest declares.
+
+        It shipped `max_results` for both templates once; the sample manifest
+        declares `search_term`, so the very first `python run.py` died with
+        `unknown parameter(s) ['max_results']`.
+        """
+        plugins_dir = tmp_path / "plugins"
+        result = runner.invoke(
+            app,
+            ["scaffold", "new-plugin", "site", "-t", template,
+             "--plugins-dir", str(plugins_dir)],
+        )
+        assert result.exit_code == 0, result.output
+
+        manifest = yaml.safe_load((plugins_dir / "site" / "plugin.yaml").read_text())
+        declared = set(manifest.get("params") or {})
+
+        run_py = (tmp_path / "run.py").read_text()
+        block = run_py.split("PARAMS: dict[str, object] = {")[1].split("}")[0]
+        used = set(re.findall(r'"([a-z_]+)":', block))
+
+        assert used, "run.py declares no params at all"
+        assert used <= declared, f"run.py uses {used - declared}, manifest declares {declared}"
+
+    def test_scaffold_never_overwrites_project_files(self, tmp_path):
+        """Scaffolding a second plugin must not clobber the run.py you edited."""
+        plugins_dir = tmp_path / "plugins"
+        runner.invoke(app, ["scaffold", "new-plugin", "first", "--plugins-dir", str(plugins_dir)])
+        (tmp_path / "run.py").write_text("# my own edits\n")
+
+        result = runner.invoke(
+            app, ["scaffold", "new-plugin", "second", "--plugins-dir", str(plugins_dir)]
+        )
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / "run.py").read_text() == "# my own edits\n"

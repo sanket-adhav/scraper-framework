@@ -242,6 +242,99 @@ def _write_http(root: Path, name: str, url: str) -> None:
     )
 
 
+RUN_PY_TEMPLATE = '''\
+"""Run a scraper from Python. Edit PARAMS, then: python run.py"""
+
+from cli.api import run_scraper
+
+PLUGINS_DIR = "{plugins_dir}"
+PLUGIN = "{name}"
+
+# Whatever the plugin declares under `params:` in its plugin.yaml.
+PARAMS: dict[str, object] = {{
+{params}}}
+
+if __name__ == "__main__":
+    result = run_scraper(PLUGIN, PARAMS, plugins_dir=PLUGINS_DIR)
+    print(result)
+    # `ok` is False if anything aborted OR was quarantined — check this,
+    # not `aborted`, or you will call a run with 300 failures a success.
+    raise SystemExit(0 if result.ok else 1)
+'''
+
+ENV_TEMPLATE = """\
+# Secrets for your scrapers. Referenced from YAML as secret://NAME.
+# NEVER commit this file.
+#
+# Example — a Postgres destination:
+#   DATABASE_URL=postgresql://user:password@localhost:5432/scrapes
+# then in extraction.yaml:
+#   persist:
+#     repositories:
+#       - name: postgres
+#         options: {dsn: "secret://DATABASE_URL"}
+"""
+
+GITIGNORE_TEMPLATE = """\
+.env
+output/
+quarantine/
+__pycache__/
+*.pyc
+"""
+
+PROJECT_LABELS = {
+    "run.py": "run scrapes from Python",
+    ".env": "secrets — never commit this",
+    ".gitignore": "excludes .env and outputs",
+    "config": "optional: override framework defaults",
+    "output": "your scraped data lands here",
+    "quarantine": "records that failed, for review",
+}
+
+
+# The PARAMS each template's manifest actually declares. run.py has to match,
+# or the first `python run.py` fails with "unknown parameter(s)".
+TEMPLATE_RUN_PARAMS = {
+    "sample": '    "search_term": "example",\n',
+    "http": '    "search": "example",\n    "max_results": 5,\n',
+}
+
+
+def scaffold_project(name: str, plugins_dir: Path, *, template: str = "sample") -> list[Path]:
+    """Creates the surrounding project layout next to the plugins folder.
+
+    Writes run.py, .env, .gitignore and the config/ output/ quarantine/ folders,
+    so a fresh install has somewhere obvious to put everything. Anything that
+    already exists is left untouched — scaffolding a second plugin never
+    overwrites your edits. Returns only what it actually created."""
+    project = plugins_dir.parent
+    created: list[Path] = []
+
+    run_py = RUN_PY_TEMPLATE.format(
+        name=name,
+        plugins_dir=plugins_dir.name,
+        params=TEMPLATE_RUN_PARAMS.get(template, TEMPLATE_RUN_PARAMS["sample"]),
+    )
+    files = {
+        project / "run.py": run_py,
+        project / ".env": ENV_TEMPLATE,
+        project / ".gitignore": GITIGNORE_TEMPLATE,
+    }
+    for path, body in files.items():
+        if not path.exists():
+            path.write_text(body, encoding="utf-8")
+            created.append(path)
+
+    for folder in ("config", "output", "quarantine"):
+        path = project / folder
+        if not path.exists():
+            path.mkdir(parents=True)
+            created.append(path)
+
+    return created
+
+
 def scaffold_plugin(
     name: str,
     plugins_dir: Path,
