@@ -43,6 +43,7 @@ dev = [
 
 [project.scripts]
 scraper = "cli.main:app"
+scraper-mcp = "mcp_server.server:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -53,7 +54,7 @@ build-backend = "hatchling.build"
 # work, selectors, business logic) and they are not importable from
 # site-packages anyway — plugin discovery scans a `plugins/` directory relative
 # to the working directory, not the installed package.
-packages = ["core", "components", "cli"]
+packages = ["core", "components", "cli", "mcp_server"]
 
 # Ship the default config as package data. `artifacts` force-includes these
 # regardless of VCS ignore rules, so a stray .gitignore pattern can never again
@@ -66,7 +67,7 @@ artifacts = [
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "core", "components", "cli", "plugins", "tests", "docs", "config",
+    "core", "components", "cli", "mcp_server", "plugins", "tests", "docs", "config",
     "README.md", "CONTRIBUTING.md", "pyproject.toml", "importlinter.ini",
 ]
 
