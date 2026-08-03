@@ -7,11 +7,11 @@
 pipeline: [fetch, parse, extract, validate, transform, persist]
 
 urls:
-  - "http://localhost:5577/Policies"
+  - "http://187.127.129.18:5577/Policies"
 
 fetcher: authenticated_playwright
 fetcher_options:
-  login_url: "http://localhost:5577/Account/Login"
+  login_url: "http://187.127.129.18:5577/Account/Login"
   username: "secret://env/AMS_EMAIL"
   password: "secret://env/AMS_PASSWORD"
   username_selector: 'input[name="Input.Email"]'

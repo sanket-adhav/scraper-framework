@@ -28,7 +28,7 @@ import dotenv
 import yaml
 from mcp.server.fastmcp import FastMCP
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path.cwd()
 PLUGINS_DIR = REPO_ROOT / "plugins"
 OUTPUT_DIR = REPO_ROOT / "output"
 DEFAULT_PLUGIN = "ams_book_rolling"
